@@ -1,5 +1,5 @@
 import express from 'express';
-import cors from 'cors';
+// import cors from 'cors';
 import dotenv from 'dotenv';
 import crypto from "crypto";
 import cron from 'node-cron';
@@ -16,18 +16,18 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const PIXEL_ID = process.env.PIXEL_ID;
 const PIXEL_TOKEN = process.env.PIXEL_TOKEN ;
 
-const corsOptions = {
-	origin: [
-		'https://nice-advice.info',
-		'https://www.nice-advice.info',
-    'http://localhost:5173'
-	],
-	credentials: true,
-	methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-}
+// const corsOptions = {
+// 	origin: [
+// 		'https://nice-advice.info',
+// 		'https://www.nice-advice.info',
+//     'http://localhost:5173'
+// 	],
+// 	credentials: true,
+// 	methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+// }
 
 server.use(express.json());
-server.use(cors(corsOptions));
+// server.use(cors(corsOptions));
 
 
 let isRunning = false;
