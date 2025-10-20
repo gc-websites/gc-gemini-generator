@@ -12,22 +12,47 @@ const STRAPI_API_URL = process.env.STRAPI_API_URL;
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const ai = new GoogleGenAI(GEMINI_API_KEY);
 
+const categories = ['Lifestyle and Wellness', 'Your Health', 'Family', 'Diseases and Conditions'];
+
+const generateQuery = async () => {
+  try{
+    const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+    const prompt = `Come up with an interesting topic for a post in the category ${randomCategory}. In the response, I want a simple subject line consisting of a few words. There's no need to explain anything or write anything before or after the subject line. So, the response should just be the subject line, one line.`;
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const result = await model.generateContent(prompt);
+    const cleanRes = result.response.text().trim();
+    if(randomCategory === 'Lifestyle and Wellness'){
+      return {query: cleanRes, categoryId: 18}
+    }else if(randomCategory === 'Your Health'){
+      return {query: cleanRes, categoryId: 20}
+    }else if(randomCategory === 'Family'){
+      return {query: cleanRes, categoryId: 22}
+    }else{
+      return {query: cleanRes, categoryId: 3}
+    }
+  }
+  catch (error) {
+    console.error(error);
+    return {error: 'Ошибка при генерации Темы'};
+  }
+}
+
 const generateGlobalObj = async (query) => {
   try {
     const prompt = `You are a CMS content generator. Return ONLY a valid raw JSON object — no markdown, no explanations, no backticks, no comments. Your output MUST start and end with { and }. Create an article in JSON format based on the topic: "${query}". The article must include exactly 2 paragraphs in the "paragraphs" array. JSON must always have property 'paragraphs' which is an array of EXACTLY 2 objects, no more, no less. Never reply with fewer or more than 2 items in the paragraphs array. The article should match this structure:
               {
-                "title": "...",
-                "description": ["... (min 700 characters)"],
+                "title": "SEO-optimized, human-readable title (55–65 characters, includes main keyword)",
+                "description": ["Full intro (min 700 characters). Begin with a 150–160 character SEO meta description, then an engaging intro mentioning ${{query}} and 1–2 LSI terms."],
                 "isPopular": false,
                 "paragraphs": [
                   {
-                    "subtitle": "...",
-                    "description": ["... (min 700 characters)"],
+                    "subtitle": "Informative subheading #1 (with keyword variation)",
+                    "description": ["Comprehensive section (min 700 characters) exploring one core aspect of the topic. Integrate 2–3 LSI terms and implicitly answer one People Also Ask question. Provide examples, steps, or data."],
                     "ads": [
-                      { "title": "...", "url": "https://..." },
-                      { "title": "...", "url": "https://..." }
+                      { "title": "Helpful Tool or Product", "url": "https://..." },
+                      { "title": "Trusted Resource", "url": "https://..." }
                     ],
-                    "image_prompt": "prompt for image generation"
+                    "image_prompt": "Describe a realistic, contextually relevant image for this section (avoid text or logos)"
                   }
                 ],
                 "ads": [
@@ -35,9 +60,9 @@ const generateGlobalObj = async (query) => {
                   { "title": "...", "url": "https://..." },
                   { "title": "...", "url": "https://..." }
                 ],
-                "image_prompt": "main image prompt",
-                "firstAdBanner": { "url": "https://...", "image_prompt": "..." },
-                "secondAdBanner": { "url": "https://...", "image_prompt": "..." }
+                "image_prompt": "Describe a realistic, contextually relevant image for this section (avoid text or logos)",
+                "firstAdBanner": { "url": "https://...", "image_prompt": "Describe a realistic, contextually relevant image for this section (avoid text or logos)" },
+                "secondAdBanner": { "url": "https://...", "image_prompt": "Describe a realistic, contextually relevant image for this section (avoid text or logos)" }
               }`
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent(prompt);
@@ -95,12 +120,12 @@ const generateImages = async (obj) => {
 return ids;
 }
 
-const prepForPush = async (obj, ids) => {
+const prepForPush = async (obj, ids, categoryId) => {
   const editedObj = JSON.parse(
   JSON.stringify(obj, (key, value) => (key === "image_prompt" ? undefined : value)));
   
   editedObj.author = 1;
-  editedObj.category = 22;
+  editedObj.category = categoryId;
 
   editedObj.image = ids[0];
   editedObj.firstAdBanner.image = ids[1];
@@ -152,4 +177,19 @@ const strapiPost = async (obj) => {
     }
 }
 
-export {generateGlobalObj, generateImages, prepForPush, strapiPost};
+const generateAndPost = async () => {
+  try {
+    const { query, categoryId } = await generateQuery();
+    const result = await generateGlobalObj(query);
+    const imageids = await generateImages(result);
+    const resultToStrapiPost = await prepForPush(result, imageids, categoryId);
+    const isPostedToStrapi = await strapiPost(resultToStrapiPost);
+    console.log('generateAndPost finished:', isPostedToStrapi);
+    return isPostedToStrapi;
+  } catch (error) {
+    console.error('Ошибка в generateAndPost:', error);
+    throw error;
+  }
+}
+
+export {generateGlobalObj, generateImages, generateQuery, prepForPush, strapiPost, generateAndPost};
