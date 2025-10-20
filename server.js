@@ -1,5 +1,5 @@
 import express from 'express';
-// import cors from 'cors';
+import cors from 'cors';
 import dotenv from 'dotenv';
 import crypto from "crypto";
 // import cron from 'node-cron';
@@ -27,7 +27,7 @@ const PIXEL_TOKEN = process.env.PIXEL_TOKEN ;
 // }
 
 server.use(express.json());
-// server.use(cors(corsOptions));
+server.use(cors());
 
 
 // let isRunning = false;
