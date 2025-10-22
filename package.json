@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "download-report": "node reportDownloader.js"
   },
   "keywords": [],
   "author": "",
@@ -14,9 +15,12 @@
     "@google/genai": "^1.20.0",
     "@google/generative-ai": "^0.24.1",
     "cors": "^2.8.5",
+    "csv-parser": "^3.2.0",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "form-data": "^4.0.4",
-    "node-cron": "^4.2.1"
+    "nanoid": "^5.1.6",
+    "node-cron": "^4.2.1",
+    "playwright": "^1.48.2"
   }
 }

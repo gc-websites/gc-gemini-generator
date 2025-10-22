@@ -5,6 +5,7 @@ import crypto from "crypto";
 import cron from 'node-cron';
 import {generateAndPost} from './functions.js';
 import { generateImg, generateProduct, postToStrapi } from './functionsForProducts.js';
+import { createLead, readCSV, strapiLeadPost } from './pixel.js';
 
 const server = express();
 const PORT = process.env.PORT || 4000;
@@ -116,8 +117,25 @@ server.get('/get-product/:id', async (req, res) => {
   }
 })
 
+server.post('/get-product/ads/:id', async (req, res) => {
+  const {id} = req.params;
+  const {fbclid} = req.body;
+   const lead = await createLead(fbclid, id);
+   const result = await strapiLeadPost(lead);
+   if(result){
+    res.send(lead.clickId);
+   }
+   else{
+    console.log('error')
+   }
+})
+
+server.get('/test', async (req, res) => {
+  const csv = await readCSV();
+  res.json(csv);
+})
+
 
 server.listen(PORT, () => {
   console.log(`Server started: http://localhost:${PORT}`);
 });
-
