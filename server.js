@@ -28,7 +28,7 @@ const corsOptions = {
 }
 
 server.use(express.json());
-server.use(cors(corsOptions));
+server.use(cors());
 
 
 let isRunning = false;
@@ -123,7 +123,7 @@ server.post('/get-product/ads/:id', async (req, res) => {
    const lead = await createLead(fbclid, id);
    const result = await strapiLeadPost(lead);
    if(result){
-    res.send(lead.clickId);
+    res.json({data: lead.clickId});
    }
    else{
     console.log('error')
