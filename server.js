@@ -6,6 +6,7 @@ import cron from 'node-cron';
 import {generateAndPost} from './functions.js';
 import { generateImg, generateProduct, postToStrapi } from './functionsForProducts.js';
 import { createLead, readCSV, strapiLeadPost } from './pixel.js';
+import { generateAndPostCholesterin} from './functionsCholesterin.js';
 
 const server = express();
 const PORT = process.env.PORT || 4000;
@@ -21,7 +22,8 @@ const corsOptions = {
 	origin: [
 		'https://nice-advice.info',
 		'https://www.nice-advice.info',
-    'http://localhost:5173'
+    'http://localhost:5173',
+    'https://cholesterintipps.de'
 	],
 	credentials: true,
 	methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -41,6 +43,7 @@ cron.schedule('0 8,20 * * *', async () => {
   try {
     console.log('Scheduled job start:', new Date().toISOString());
     await generateAndPost();
+    await generateAndPostCholesterin();
     console.log('Scheduled job end:', new Date().toISOString());
   } catch (err) {
     console.error('Scheduled job error:', err);
@@ -131,8 +134,8 @@ server.post('/get-product/ads/:id', async (req, res) => {
 })
 
 server.get('/test', async (req, res) => {
-  const csv = await readCSV();
-  res.json(csv);
+   const result = await generateAndPost();
+   res.status(200).send(result);
 })
 
 
