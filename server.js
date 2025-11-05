@@ -7,6 +7,7 @@ import {generateAndPost} from './functions.js';
 import { generateImg, generateProduct, postToStrapi } from './functionsForProducts.js';
 import { createLead, readCSV, strapiLeadPost } from './pixel.js';
 import { generateAndPostCholesterin} from './functionsCholesterin.js';
+import { generateAndPostHairStyles } from './functionsHairStyles.js';
 
 const server = express();
 const PORT = process.env.PORT || 4000;
@@ -134,7 +135,7 @@ server.post('/get-product/ads/:id', async (req, res) => {
 })
 
 server.get('/test', async (req, res) => {
-   const result = await generateAndPost();
+   const result = await generateAndPostHairStyles();
    res.status(200).send(result);
 })
 

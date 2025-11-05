@@ -1,0 +1,296 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from "@google/genai";
+import fetch from "node-fetch";
+import FormData from "form-data";
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const STRAPI_TOKEN = process.env.STRAPI_TOKEN;
+const STRAPI_API_URL = process.env.STRAPI_API_URL;
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+const ai = new GoogleGenAI(GEMINI_API_KEY);
+
+const categories = [
+  'Women’s Hairstyles for Seniors',
+  'Men’s Hairstyles for Seniors',
+  'Hair Care for Seniors',
+  'Special Occasion Hairstyles for Seniors',
+  'Hair Styling Tutorials for Seniors',
+  'Hair Tools & Products for Seniors',
+  'Hair Problems & Solutions for Seniors',
+  'Inspiration & Gallery for Seniors',
+  'Reviews & Recommendations for Seniors'
+];
+
+const generateQuery = async () => {
+  try{
+    const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+    const prompt = `Come up with an interesting topic for a post in the category ${randomCategory}. In the response, I want a simple subject line consisting of a few words. There's no need to explain anything or write anything before or after the subject line. So, the response should just be the subject line, one line.`;
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const result = await model.generateContent(prompt);
+    const cleanRes = result.response.text().trim();
+    if(randomCategory === 'Women’s Hairstyles for Seniors'){
+      return {query: cleanRes, categoryId: 1}
+    }else if(randomCategory === 'Men’s Hairstyles for Seniors'){
+      return {query: cleanRes, categoryId: 3}
+    }else if(randomCategory === 'Hair Care for Seniors'){
+      return {query: cleanRes, categoryId: 5}
+    }else if(randomCategory === 'Special Occasion Hairstyles for Seniors'){
+      return {query: cleanRes, categoryId: 7}
+    }else if(randomCategory === 'Hair Styling Tutorials for Seniors'){
+      return {query: cleanRes, categoryId: 9}
+    }else if(randomCategory === 'Hair Tools & Products for Seniors'){
+      return {query: cleanRes, categoryId: 11}
+    }else if(randomCategory === 'Hair Problems & Solutions for Seniors'){
+      return {query: cleanRes, categoryId: 13}
+    }else if(randomCategory === 'Inspiration & Gallery for Seniors'){
+      return {query: cleanRes, categoryId: 15}
+    }else{
+      return {query: cleanRes, categoryId: 17}
+    }
+  }
+  catch (error) {
+    console.error(error);
+    return {error: 'Ошибка при генерации Темы'};
+  }
+}
+
+const generateGlobalObj = async (query, categoryId, category) => {
+  const globalObj = {
+    title: '',
+    description: [
+      {
+        type: 'paragraph',
+        children: [
+          {
+            type: 'text',
+            text: ''
+          }
+        ]}
+    ],
+    isPopular: false,
+    paragraphs: [
+      {
+        subtitle: '',
+        description: [
+          {
+            type: 'paragraph',
+            children: [
+              {
+                type: 'text',
+                text: ''
+              }
+            ]
+          }
+        ],
+        ads: [
+          {title: 'Example adds title', url: ''},
+          {title: 'Example adds title', url: ''}
+        ],
+        image: undefined
+      },
+      {
+        subtitle: '',
+        description: [
+          {
+            type: 'paragraph',
+            children: [
+              {
+                type: 'text',
+                text: ''
+              }
+            ]
+          }
+        ],
+        ads: [
+          {title: 'Example adds title', url: 'https://example.com'},
+          {title: 'Example adds title', url: 'https://example.com'}
+        ],
+        image: undefined
+      }
+    ],
+    ads: [
+      {title: 'Example adds title', url: 'https://example.com'},
+      {title: 'Example adds title', url: 'https://example.com'},
+      {title: 'Example adds title', url: 'https://example.com'}
+    ],
+    firstAdBanner: {
+      url: 'https://example.com',
+      image: undefined
+    },
+    secondAdBanner: {
+      url: 'https://example.com',
+      image: undefined
+    },
+    author_3: 1,
+    category_3: categoryId,
+    image: undefined
+  }
+
+  let title = undefined;
+  let description = undefined;
+  let subTitleP1 = undefined;
+  let descrP1 = undefined;
+  let subTitleP2 = undefined;
+  let descrP2 = undefined;
+
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  try{
+    const resTitle = await model.generateContent(`Come up with an interesting title for my post on the topic ${query}. The title should be approximately 45-70 characters long. In your reply, write absolutely nothing except the title. Don't write anything at the beginning or end of your reply. Just give me the result as the title. Don't give a truncated answer; the title needs to be full and complete.`);
+    title = resTitle.response.text().trim();
+  }catch(e){
+    console.log(`Ошибка при генерации заголовка поста: ${e}`);
+    return false;
+  }
+  try{
+    const resDescription = await model.generateContent(`Create a description for my post. It must contain at least 700 characters. This is the category in which this post will be located on my website ${category}. This is the topic of the post that needs to be taken into account when creating the description ${query}. In your reply, write absolutely nothing except the description. Don't write anything at the beginning or end of your reply.`);
+    description = resDescription.response.text().trim();
+  }catch(e){
+    console.log(`Ошибка при создании описания поста: ${e}`)
+    return false;
+  }
+  try{
+    const resSubTitleP1 = await model.generateContent(`Write a title for a paragraph of my article. In your response, don't include anything other than the title itself. Don't add anything at the beginning or end of your response; just write the title. It should be 45-75 characters long and make sense. When creating the title, consider the category the article is in - ${category}, Also consider the topic of the article - ${query}. When creating a title, take into account the description of my article - ${description}.`);
+    subTitleP1 = resSubTitleP1.response.text().trim();
+  }catch(e){
+    console.log(`Ошибка при создании первого подзаголовка поста: ${e}`)
+    return false;
+  }
+  try{
+    const resDescrP1 = await model.generateContent(`Create a paragraph for my article on the website. In your response, write nothing but the paragraph itself. Don't add anything before or after the paragraph. Your response should only include the paragraph itself. Here's the category the paragraph is in - ${category}. This is the topic of my article - ${query}. Here is the description of my article - ${description}. And here is the heading for the paragraph you need to create - ${subTitleP1}. The length of a paragraph must be no less than 700 characters.`);
+    descrP1 = resDescrP1.response.text().trim();
+  }catch(e){
+    console.log(`Ошибка при создании первого параграфа поста: ${e}`);
+    return false;
+  }
+  try{
+    const resSubTitleP2 = await model.generateContent(`Write a title for a paragraph of my article. In your response, don't include anything other than the title itself. Don't add anything at the beginning or end of your response; just write the title. It should be 45-75 characters long and make sense. When creating the title, consider the category the article is in - ${category}, Also consider the topic of the article - ${query}. When creating a title, take into account the description of my article - ${description}.`);
+    subTitleP2 = resSubTitleP2.response.text().trim();
+  }catch(e){
+    console.log(`Ошибка при создании второго подзаголовка поста: ${e}`)
+    return false;
+  }
+  try{
+    const resDescrP2 = await model.generateContent(`Create a paragraph for my article on the website. In your response, write nothing but the paragraph itself. Don't add anything before or after the paragraph. Your response should only include the paragraph itself. Here's the category the paragraph is in - ${category}. This is the topic of my article - ${query}. Here is the description of my article - ${description}. And here is the heading for the paragraph you need to create - ${subTitleP2}. The length of a paragraph must be no less than 700 characters.`);
+    descrP2 = resDescrP2.response.text().trim();
+  }catch(e){
+    console.log(`Ошибка при создании второго параграфа  поста: ${e}`);
+    return false;
+  }
+
+  if(title && description && subTitleP1 && descrP1 && subTitleP2 && descrP2){
+    globalObj.title = title;
+    globalObj.description[0].children[0].text = description;
+    globalObj.paragraphs[0].subtitle = subTitleP1;
+    globalObj.paragraphs[0].description[0].children[0].text = descrP1;
+    globalObj.paragraphs[1].subtitle = subTitleP2;
+    globalObj.paragraphs[1].description[0].children[0].text = descrP2;
+  }else{
+    console.log('Ошибка генерации главного обьекта');
+    return false;
+  }
+
+  return globalObj;
+}
+
+const generateImages = async (globalObj) => {
+  const img1 = `Create an image for an article on my website. The image must be of the highest quality, super realistic, without magic or non-existent objects. Make it as close to reality as possible. Here's the title of my article - ${globalObj.title}. Here is the description of my article - ${globalObj.description[0].children[0].text}. Here is the paragraph of my article - ${globalObj.paragraphs[0].description[0].children[0].text}. Create an image for this article based on this information. It should be realistic and reflective of real life.`;
+  const img2 = `Create an image for an article on my website. The image must be of the highest quality, super realistic, without magic or non-existent objects. Make it as close to reality as possible. Here's the title of my article - ${globalObj.title}. Here is the description of my article - ${globalObj.description[0].children[0].text}. Here is the paragraph of my article - ${globalObj.paragraphs[1].description[0].children[0].text}. Create an image for this article based on this information. It should be realistic and reflective of real life.`;
+  const img3 = `Create an image for an article on my website. The image must be of the highest quality, super realistic, without magic or non-existent objects. Make it as close to reality as possible. Here's the title of my article - ${globalObj.title}. Here is the description of my article - ${globalObj.description[0].children[0].text}. Create an image for this article based on this information. It should be realistic and reflective of real life.`;
+  const img4 = `Create an image for an article on my website. The image must be of the highest quality, super realistic, without magic or non-existent objects. Make it as close to reality as possible. Here's the title of my article - ${globalObj.title}. Here is the description of my article - ${globalObj.description[0].children[0].text}. Here is the first paragraph of my article - ${globalObj.paragraphs[0].description[0].children[0].text}. Here is the second paragraph of my article - ${globalObj.paragraphs[1].description[0].children[0].text}. Create an image for this article based on this information. It should be realistic and reflective of real life.`;
+  const img5 = `Create an image for an article on my website. The image must be of the highest quality, super realistic, without magic or non-existent objects. Make it as close to reality as possible. Here's the title of my article - ${globalObj.title}. Here is the description of my article - ${globalObj.description[0].children[0].text}. Here is the first paragraph of my article - ${globalObj.paragraphs[0].description[0].children[0].text}. Here is the second paragraph of my article - ${globalObj.paragraphs[1].description[0].children[0].text}. Create an image for this article based on this information. It should be realistic and reflective of real life.`;
+  const prompts = [img1, img2, img3, img4, img5];
+  const ids = [];
+  
+  for (let i = 0; i < prompts.length; i++) {
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash-image-preview",
+    contents: prompts[i],
+    generationConfig: { candidateCount: 1 },
+  });
+
+  const part = response.candidates[0].content.parts.find((p) => p.inlineData);
+  if (!part) continue;
+
+  const buffer = Buffer.from(part.inlineData.data, "base64");
+
+  const formData = new FormData();
+  formData.append("files", buffer, {
+    filename: `gemini-image-${i + 1}.png`,
+    contentType: "image/png",
+  });
+
+  const uploadRes = await fetch(`${STRAPI_API_URL}/api/upload`, {
+    method: "POST",
+    headers: {
+      Authorization: STRAPI_TOKEN,
+    },
+    body: formData,
+  });
+
+  const result = await uploadRes.json();
+  if (Array.isArray(result) && result[0]?.id) {
+      ids.push(result[0].id);
+      console.log(`✅ Uploaded image ${i + 1} to Strapi: id=${result[0].id}`);
+    } else {
+      console.warn(`⚠️ No id found for image ${i + 1}`, result);
+    }
+}
+return ids;
+}
+
+const prepForPush = async (ids, obj) => {
+  const editedObj = obj;
+  editedObj.paragraphs[0].image = ids[0];
+  editedObj.paragraphs[1].image = ids[1];
+  editedObj.image = ids[2];
+  editedObj.firstAdBanner.image = ids[3];
+  editedObj.secondAdBanner.image = ids[4];
+
+  return editedObj;
+}
+
+const strapiPost = async (obj) => {
+  try {
+    console.log(obj);
+      const strapiRes = await fetch(`${STRAPI_API_URL}/api/post3s`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: STRAPI_TOKEN,
+        },
+        body: JSON.stringify({ data: obj }),
+      })
+      if (!strapiRes.ok) {
+        const err = await strapiRes.text()
+        throw new Error(err)
+      }
+      return obj;
+    } catch (err) {
+      console.error('❌ Create-post error:', err)
+      return err.message;
+    }
+}
+
+const generateAndPostHairStyles = async () => {
+  try {
+      const { query, categoryId, category } = await generateQuery();
+      console.log('Тема згенерована');
+      const globalObj = await generateGlobalObj(query, categoryId, category);
+      console.log('Глобальний обєкт згенеровано');
+      const imageIds = await generateImages(globalObj);
+      console.log('картинки завантажено');
+      const prepForPushRes = await prepForPush(imageIds, globalObj);
+      console.log('обєкт змінено')
+      const isPostedToStrapi = await strapiPost(prepForPushRes);
+      console.log('Єсть')
+      return isPostedToStrapi;
+    } catch (error) {
+      console.error('Ошибка в generateAndPost:', error);
+      throw error;
+    }
+}
+
+export {generateGlobalObj, generateImages, generateQuery, prepForPush, strapiPost, generateAndPostHairStyles};
