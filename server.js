@@ -45,6 +45,7 @@ cron.schedule('0 8,20 * * *', async () => {
     console.log('Scheduled job start:', new Date().toISOString());
     await generateAndPost();
     await generateAndPostCholesterin();
+    await generateAndPostHairStyles();
     console.log('Scheduled job end:', new Date().toISOString());
   } catch (err) {
     console.error('Scheduled job error:', err);
