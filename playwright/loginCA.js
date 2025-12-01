@@ -6,7 +6,7 @@ import path from "path";
 dotenv.config({ path: path.resolve("../.env") });
 
 async function loginCA() {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: false });
   const context = await browser.newContext();
   const page = await context.newPage();
 

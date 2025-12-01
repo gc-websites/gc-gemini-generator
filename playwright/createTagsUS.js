@@ -88,5 +88,3 @@ export async function createTagUS() {
   await browser.close();
   return result;
 }
-
-// createTagUS().then(console.log);
