@@ -82,7 +82,9 @@ server.post('/generate-post', async (req, res) => {
 server.post('/generate-product', async (req, res) => {
   const {query, link, country} = req.body;
   const tag = await getTags(country);
+  console.log('Tag created');
   const refLink = await generateRefLink(link, tag.name);
+  console.log('RefLink Created');
   const product = {
     title: '',
     descriptionfield1: '',
@@ -94,6 +96,7 @@ server.post('/generate-product', async (req, res) => {
     tag: tag.name
   }
   const result = await generateProduct(query);
+  console.log('BodyProductGenerated');
   product.title = result.title;
   product.descriptionfield1 = result.descriptionfield1;
   product.descriptionfield2 = result.descriptionfield2;
@@ -102,8 +105,11 @@ server.post('/generate-product', async (req, res) => {
   const imgId = await generateImg(query);
   product.image = imgId;
   const postId = await postToStrapi(product);
+  console.log('PostedToStrapi');
   await updateTagStatus(tag, country);
+  console.log('Tag status updated');
   const createTagRes = await tagCreator(country);
+  console.log('New tag created');
   if(createTagRes){
     res.json({id: postId});
   }
