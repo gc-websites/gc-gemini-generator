@@ -6,7 +6,7 @@ import path from "path";
 dotenv.config({ path: path.resolve("../.env") });
 
 async function loginCA() {
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -36,6 +36,6 @@ async function loginCA() {
   console.log("🎉 Сессия сохранена → amazon-sessionCA.json");
   await browser.close();
 }
-
+ loginCA();
 
 export default loginCA;
