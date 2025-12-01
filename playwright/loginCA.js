@@ -37,5 +37,3 @@ async function loginCA() {
   await browser.close();
 }
  loginCA();
-
-export default loginCA;

@@ -63,5 +63,3 @@ export const tagCreator = async (country) => {
     return err.message;
   }
 }
-
-tagCreator('Canada');
