@@ -4,10 +4,11 @@ import dotenv from 'dotenv';
 import crypto from "crypto";
 import cron from 'node-cron';
 import {generateAndPost} from './functions.js';
-import { generateImg, generateProduct, postToStrapi } from './functionsForProducts.js';
+import { generateImg, generateProduct, generateRefLink, getTags, postToStrapi, updateTagStatus } from './functionsForProducts.js';
 import { createLead, readCSV, strapiLeadPost } from './pixel.js';
 import { generateAndPostCholesterin} from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
+import { tagCreator } from './tagCreator.js';
 
 const server = express();
 const PORT = process.env.PORT || 4000;
@@ -79,7 +80,9 @@ server.post('/generate-post', async (req, res) => {
 // });
 
 server.post('/generate-product', async (req, res) => {
-  const {query, link} = req.body;
+  const {query, link, country} = req.body;
+  const tag = await getTags(country);
+  const refLink = await generateRefLink(link, tag.name);
   const product = {
     title: '',
     descriptionfield1: '',
@@ -87,7 +90,8 @@ server.post('/generate-product', async (req, res) => {
     descriptionfield3: '',
     descriptionfield4: '',
     image: '',
-    link: link
+    link: refLink,
+    tag: tag.name
   }
   const result = await generateProduct(query);
   product.title = result.title;
@@ -98,7 +102,14 @@ server.post('/generate-product', async (req, res) => {
   const imgId = await generateImg(query);
   product.image = imgId;
   const postId = await postToStrapi(product);
-  res.json({id: postId});
+  await updateTagStatus(tag, country);
+  const createTagRes = await tagCreator(country);
+  if(createTagRes){
+    res.json({id: postId});
+  }
+  else{
+    res.json({error: 'ERROR'});
+  }
 })
 
 server.get('/get-product/:id', async (req, res) => {

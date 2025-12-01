@@ -3,14 +3,68 @@ import { GoogleGenAI } from "@google/genai";
 import fetch from "node-fetch";
 import FormData from "form-data";
 import dotenv from 'dotenv';
+import pkg from "paapi5-nodejs-sdk";
 
 dotenv.config();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const STRAPI_TOKEN = process.env.STRAPI_TOKEN;
 const STRAPI_API_URL = process.env.STRAPI_API_URL;
+const accessKey = process.env.PAAPI_ACCESS_KEY;
+const secretKey = process.env.PAAPI_SECRET_KEY;
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const ai = new GoogleGenAI(GEMINI_API_KEY);
+const { DefaultApi, GetItemsRequest, Configuration } = pkg;
+
+const getTags = async (country) => {
+  let strapiUrl;
+
+  if (country === 'USA') {
+    strapiUrl = `${STRAPI_API_URL}/api/taguses`;
+  } else if (country === 'Canada') {
+    strapiUrl = `${STRAPI_API_URL}/api/tagcas`;
+  } else {
+    throw new Error("Unsupported country");
+  }
+
+  try {
+    const strapiRes = await fetch(strapiUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: STRAPI_TOKEN,
+      }
+    });
+
+    if (!strapiRes.ok) {
+      console.error("❌ Strapi error:", strapiRes.status, strapiRes.statusText);
+      return null;
+    }
+
+    const json = await strapiRes.json();
+    const items = json?.data || [];
+
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+
+    const filtered = items.filter(item => {
+      const createdAt = new Date(item.createdAt).getTime();
+      const isOlderThan24h = (now - createdAt) >= dayMs;
+
+      return item.isUsed === false && isOlderThan24h;
+    });
+    return filtered.length > 0 ? filtered[0] : null;
+
+  } catch (err) {
+    console.error('❌ getTags error:', err);
+    return null;
+  }
+};
+
+const generateRefLink = (link, partnerTag) => {
+  const refLink = `${link}&tag=${partnerTag}`;
+  return refLink;
+}
 
 const generateProduct = async (query) => {
   const titlePrompt = `Generate a short catchy headline with mention of deals. Ex - Unbeatable Deals on Women's Puffer Jackets! Title on the subject ${query}. I want a short answer with only 1 result.`;
@@ -114,4 +168,36 @@ const postToStrapi = async (product) => {
       }
 }
 
-export {generateProduct, generateImg, postToStrapi};
+const updateTagStatus = async (tag, country) => {
+  let collection;
+  if (country === 'USA') {
+    collection = "taguses";
+  } else if (country === 'Canada') {
+    collection = "tagcas";
+  }
+
+  const updateUrl = `${STRAPI_API_URL}/api/${collection}/${tag.documentId}`;
+  const updateRes = await fetch(updateUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `${STRAPI_TOKEN}`,
+      },
+      body: JSON.stringify({
+        data: {
+          isUsed: true,
+        },
+      })
+    });
+
+    if (!updateRes.ok) {
+      console.error("❌ Strapi update error:", updateRes.status, await updateRes.text());
+      return null;
+    }
+
+    const updated = await updateRes.json();
+    return updated;
+
+}
+
+export {generateProduct, generateImg, postToStrapi, getTags, generateRefLink, updateTagStatus};
