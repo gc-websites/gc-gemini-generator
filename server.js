@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import crypto from "crypto";
 import cron from 'node-cron';
 import {generateAndPost} from './functions.js';
-import { generateImg, generateProduct, generateRefLink, getTags, postToStrapi, updateTagStatus } from './functionsForProducts.js';
+import { generateImg, generateProduct, generateRefLink, getTag, getTags, postToStrapi, updateTagFbclid, updateTagStatus } from './functionsForProducts.js';
 import { createLead, readCSV, strapiLeadPost } from './pixel.js';
 import { generateAndPostCholesterin} from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
@@ -150,6 +150,19 @@ server.post('/get-product/ads/:id', async (req, res) => {
    else{
     console.log('error')
    }
+})
+
+server.post('/fbclid', async (req, res) => {
+  const {fbclid, productId, tag} = req.body;
+  const tagFromStrapi = await getTag(tag);
+  const tagId = tagFromStrapi.documentId
+  if(tagFromStrapi.fbclid){
+    res.status(200).send(true);
+  }
+  else{
+    const result = await updateTagFbclid(fbclid, productId, tag, tagId);
+    res.json(result);
+  }
 })
 
 server.get('/test', async (req, res) => {

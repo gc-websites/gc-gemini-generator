@@ -200,4 +200,88 @@ const updateTagStatus = async (tag, country) => {
 
 }
 
-export {generateProduct, generateImg, postToStrapi, getTags, generateRefLink, updateTagStatus};
+const getTag = async (tag) => {
+  let endpoint;
+
+  if (tag.startsWith("subtag-")) {
+    endpoint = "taguses";
+  } else if (tag.startsWith("subtagcan-")) {
+    endpoint = "tagcas";
+  } else {
+    throw new Error("Unsupported tag format");
+  }
+
+  const url = `${STRAPI_API_URL}/api/${endpoint}?filters[name][$eq]=${tag}`;
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: STRAPI_TOKEN,
+      },
+    });
+
+    if (!res.ok) {
+      console.error("❌ Strapi error:", res.status, res.statusText);
+      return null;
+    }
+
+    const json = await res.json();
+    return json?.data?.[0] || null;
+  } catch (error) {
+    console.error("❌ Fetch error:", error);
+    return null;
+  }
+};
+
+const updateTagFbclid = async (fbclid, productId, tag, tagId) => {
+  let endpoint;
+
+  // Определяем коллекцию по типу тега
+  if (tag.startsWith("subtag-")) {
+    endpoint = "taguses";
+  } else if (tag.startsWith("subtagcan-")) {
+    endpoint = "tagcas";
+  } else {
+    throw new Error("Unsupported tag format");
+  }
+
+  // Формируем URL для обновления конкретного объекта
+  const url = `${STRAPI_API_URL}/api/${endpoint}/${tagId}`;
+
+  // Тело обновления
+  const body = {
+    data: {
+      fbclid,
+      productId
+    }
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: STRAPI_TOKEN,
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      console.error("❌ Strapi update error:", res.status, await res.text());
+      return null;
+    }
+
+    const json = await res.json();
+    return json?.data || null;
+
+  } catch (err) {
+    console.error("❌ Request error:", err);
+    return null;
+  }
+};
+
+
+
+export {generateProduct, generateImg, postToStrapi, getTags, generateRefLink, updateTagStatus, getTag, updateTagFbclid};
