@@ -6,7 +6,7 @@ import path from "path";
 dotenv.config({ path: path.resolve("../.env") });
 
 async function loginCA() {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: false });
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -23,17 +23,11 @@ async function loginCA() {
   await page.fill("#ap_password", process.env.AMAZON_PASSWORD);
   await page.click("#signInSubmit");
 
-  console.log("🔔 Если Amazon запросит код MFA — введи его вручную.");
-
-  // ⛔ Ставим ручную паузу — окно остаётся открытым
-  // В этот момент ты вводишь код с телефона → вход завершается
-
-  // После продолжения Playwright пойдёт дальше
-  console.log("✅ MFA подтверждён. Сохраняю сессию...");
 
   await context.storageState({ path: "amazon-sessionCA.json" });
 
   console.log("🎉 Сессия сохранена → amazon-sessionCA.json");
   await browser.close();
 }
- loginCA();
+ 
+loginCA();

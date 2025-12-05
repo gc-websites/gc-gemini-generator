@@ -58,36 +58,36 @@ function hash(value) {
     .digest("hex");
 }
 
-function createLead(fbclid, productId){
-  const timestamp = new Date().toISOString();
-  const lead = {
-    fbclid: fbclid,
-    clickId: nanoid(),
-    productId: productId,
-    date: `${timestamp}`
-  }
-  return lead;
-}
+// function createLead(fbclid, productId){
+//   const timestamp = new Date().toISOString();
+//   const lead = {
+//     fbclid: fbclid,
+//     clickId: nanoid(),
+//     productId: productId,
+//     date: `${timestamp}`
+//   }
+//   return lead;
+// }
 
-async function strapiLeadPost(lead){
-  try {
-        const strapiRes = await fetch(`https://vivid-triumph-4386b82e17.strapiapp.com/api/leads`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer e978fa4adf9de867ba4e4995ea700b6c6a57a89292646fb190ff48d45e02b136dba85b0924b3e5648a5b7dcfcd6fbc671c0a141093752ae2d92beb420e0e9ef20dce76ea8185baf29592f0760cb2296e17c2c2f472907268b8b1a299c6a48bec94eb7ad62a6fd68992975babf3f81c14ee32efe761fc2400a27e847c49371ef5',
-          },
-          body: JSON.stringify({ data: lead }),
-        })
-        if (!strapiRes.ok) {
-          const err = await strapiRes.text()
-          throw new Error(err)
-        }
-        return true;
-      } catch (err) {
-        console.error('❌ Create-post error:', err)
-        return err.message;
-      }
-}
+// async function strapiLeadPost(lead){
+//   try {
+//         const strapiRes = await fetch(`https://vivid-triumph-4386b82e17.strapiapp.com/api/leads`, {
+//           method: 'POST',
+//           headers: {
+//             'Content-Type': 'application/json',
+//             Authorization: 'Bearer e978fa4adf9de867ba4e4995ea700b6c6a57a89292646fb190ff48d45e02b136dba85b0924b3e5648a5b7dcfcd6fbc671c0a141093752ae2d92beb420e0e9ef20dce76ea8185baf29592f0760cb2296e17c2c2f472907268b8b1a299c6a48bec94eb7ad62a6fd68992975babf3f81c14ee32efe761fc2400a27e847c49371ef5',
+//           },
+//           body: JSON.stringify({ data: lead }),
+//         })
+//         if (!strapiRes.ok) {
+//           const err = await strapiRes.text()
+//           throw new Error(err)
+//         }
+//         return true;
+//       } catch (err) {
+//         console.error('❌ Create-post error:', err)
+//         return err.message;
+//       }
+// }
 
 export { readCSV, hash, createLead, strapiLeadPost };

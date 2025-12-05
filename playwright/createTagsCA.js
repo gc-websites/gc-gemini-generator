@@ -17,6 +17,7 @@ export async function createTagCA() {
     waitUntil: 'networkidle'
   });
 
+
   if (page.url().includes('signin')) {
     console.log('❌ Сессия недействительна — нужно заново залогиниться');
     await browser.close();

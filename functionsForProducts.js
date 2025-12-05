@@ -62,7 +62,7 @@ const getTags = async (country) => {
 };
 
 const generateRefLink = (link, partnerTag) => {
-  const refLink = `${link}&tag=${partnerTag}`;
+  const refLink = `${link}&tag=${partnerTag}-20`;
   return refLink;
 }
 
