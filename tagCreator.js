@@ -64,4 +64,3 @@ export const tagCreator = async (country) => {
   }
 }
 
-tagCreator('Canada');
