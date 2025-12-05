@@ -5,7 +5,7 @@ import crypto from "crypto";
 import cron from 'node-cron';
 import {generateAndPost} from './functions.js';
 import { generateImg, generateProduct, generateRefLink, getTag, getTags, postToStrapi, updateTagFbclid, updateTagStatus } from './functionsForProducts.js';
-import { createLead, readCSV, strapiLeadPost } from './pixel.js';
+//import { createLead, readCSV, strapiLeadPost } from './pixel.js';
 import { generateAndPostCholesterin} from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
 import { tagCreator } from './tagCreator.js';
