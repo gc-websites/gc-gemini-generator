@@ -285,8 +285,7 @@ const generateAndPostHairStyles = async () => {
       const prepForPushRes = await prepForPush(imageIds, globalObj);
       console.log('обєкт змінено')
       const isPostedToStrapi = await strapiPost(prepForPushRes);
-      console.log('Єсть')
-      return isPostedToStrapi;
+      return prepForPushRes;
     } catch (error) {
       console.error('Ошибка в generateAndPost:', error);
       throw error;

@@ -326,8 +326,7 @@ const generateAndPostCholesterin = async () => {
     const prepForPushRes = await prepForPush(imageIds, globalObj);
     console.log('обєкт змінено')
     const isPostedToStrapi = await strapiPost(prepForPushRes);
-    console.log('Єсть')
-    return isPostedToStrapi;
+    return prepForPushRes;
 
     // const imageids = await generateImages(result);
     // const resultToStrapiPost = await prepForPush(result, imageids, categoryId);

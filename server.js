@@ -9,6 +9,7 @@ import { generateImg, generateProduct, generateRefLink, getTag, getTags, postToS
 import { generateAndPostCholesterin} from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
 import { tagCreator } from './tagCreator.js';
+import { createTelegramBot } from "./tgBot.js";
 
 const server = express();
 const PORT = process.env.PORT || 4000;
@@ -17,6 +18,8 @@ dotenv.config();
 const STRAPI_API_URL = process.env.STRAPI_API_URL;
 const STRAPI_TOKEN = process.env.STRAPI_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const TG_TOKEN = process.env.TG_TOKEN;
+const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
 const PIXEL_ID = process.env.PIXEL_ID;
 const PIXEL_TOKEN = process.env.PIXEL_TOKEN ;
 
@@ -34,6 +37,19 @@ const corsOptions = {
 server.use(express.json());
 server.use(cors());
 
+const bot = createTelegramBot(TG_TOKEN);
+
+server.post("/send", async (req, res) => {
+  const { chatId, message } = req.body;
+
+  try {
+    await bot.sendMessage(chatId, message);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 let isRunning = false;
 cron.schedule('0 8,20 * * *', async () => {
@@ -44,9 +60,12 @@ cron.schedule('0 8,20 * * *', async () => {
   isRunning = true;
   try {
     console.log('Scheduled job start:', new Date().toISOString());
-    await generateAndPost();
-    await generateAndPostCholesterin();
-    await generateAndPostHairStyles();
+    const niceAdvicePost = await generateAndPost();
+    await bot.sendMessage(ADMIN_CHAT_ID, `New post for Nice-Advice generated! ✅\n\nTitle: ${niceAdvicePost.title}`);
+    const cholesterinPost = await generateAndPostCholesterin();
+    await bot.sendMessage(ADMIN_CHAT_ID, `New post for CholesterinTipps generated! ✅\n\nTitle: ${cholesterinPost.title}`);
+    const hairStylesPost = await generateAndPostHairStyles();
+    await bot.sendMessage(ADMIN_CHAT_ID, `New post for HairStyles generated! ✅\n\nTitle: ${hairStylesPost.title}`);
     console.log('Scheduled job end:', new Date().toISOString());
   } catch (err) {
     console.error('Scheduled job error:', err);
@@ -166,8 +185,9 @@ server.post('/fbclid', async (req, res) => {
 })
 
 server.get('/test', async (req, res) => {
-   const result = await generateAndPostHairStyles();
-   res.status(200).send(result);
+   const hairStylesPost = await generateAndPostHairStyles();
+    const result = await bot.sendMessage(ADMIN_CHAT_ID, `New post for Nice-Advice generated! ✅\n\nTitle: ${hairStylesPost.title}`);
+   res.status(200).json(result);
 })
 
 
