@@ -5,7 +5,6 @@ import crypto from "crypto";
 import cron from 'node-cron';
 import {generateAndPost} from './functions.js';
 import { generateImg, generateProduct, generateRefLink, getTag, getTags, postToStrapi, updateTagFbclid, updateTagStatus } from './functionsForProducts.js';
-//import { createLead, readCSV, strapiLeadPost } from './pixel.js';
 import { generateAndPostCholesterin} from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
 import { tagCreator } from './tagCreator.js';
@@ -52,7 +51,7 @@ server.post("/send", async (req, res) => {
 
 
 let isRunning = false;
-cron.schedule('0 8,20 * * *', async () => {
+cron.schedule('0 0,12 * * *', async () => {
   if (isRunning) {
     console.log('generateAndPost already running — skipping this run.');
     return;
@@ -60,12 +59,42 @@ cron.schedule('0 8,20 * * *', async () => {
   isRunning = true;
   try {
     console.log('Scheduled job start:', new Date().toISOString());
-    const niceAdvicePost = await generateAndPost();
-    await bot.sendMessage(ADMIN_CHAT_ID, `New post for Nice-Advice generated! ✅\n\nTitle: ${niceAdvicePost.title}`);
-    const cholesterinPost = await generateAndPostCholesterin();
-    await bot.sendMessage(ADMIN_CHAT_ID, `New post for CholesterinTipps generated! ✅\n\nTitle: ${cholesterinPost.title}`);
-    const hairStylesPost = await generateAndPostHairStyles();
-    await bot.sendMessage(ADMIN_CHAT_ID, `New post for HairStyles generated! ✅\n\nTitle: ${hairStylesPost.title}`);
+    const niceAdvicePostId = await generateAndPost();
+    await bot.sendMessage(
+    ADMIN_CHAT_ID,
+`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅NiceAdvice✅
+
+Title:  ${niceAdvicePostId.data.title}
+
+https://nice-advice.info/post/${niceAdvicePostId.data.documentId}`,
+    {
+      disable_web_page_preview: true
+    });
+    const cholesterinPostId = await generateAndPostCholesterin();
+    await bot.sendMessage(
+    ADMIN_CHAT_ID,
+`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅CholesterinTipps✅
+
+Title: ${cholesterinPostId.data.title}
+
+https://cholesterintipps.de/post/${cholesterinPostId.data.documentId}`,
+    {
+      disable_web_page_preview: true
+    });
+    const hairStylesPostId = await generateAndPostHairStyles();
+    await bot.sendMessage(
+    ADMIN_CHAT_ID,
+`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅HairStylesForSeniors✅
+
+Title: ${hairStylesPostId.data.title}
+
+https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
+    {
+      disable_web_page_preview: true
+    });
     console.log('Scheduled job end:', new Date().toISOString());
   } catch (err) {
     console.error('Scheduled job error:', err);
@@ -185,9 +214,42 @@ server.post('/fbclid', async (req, res) => {
 })
 
 server.get('/test', async (req, res) => {
-   const hairStylesPost = await generateAndPostHairStyles();
-    const result = await bot.sendMessage(ADMIN_CHAT_ID, `New post for Nice-Advice generated! ✅\n\nTitle: ${hairStylesPost.title}`);
-   res.status(200).json(result);
+  const niceAdvicePostId = await generateAndPost();
+    await bot.sendMessage(
+    ADMIN_CHAT_ID,
+`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅NiceAdvice✅
+
+Title:  ${niceAdvicePostId.data.title}
+
+https://nice-advice.info/post/${niceAdvicePostId.data.documentId}`,
+    {
+      disable_web_page_preview: true
+    });
+    const cholesterinPostId = await generateAndPostCholesterin();
+    await bot.sendMessage(
+    ADMIN_CHAT_ID,
+`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅CholesterinTipps✅
+
+Title: ${cholesterinPostId.data.title}
+
+https://cholesterintipps.de/post/${cholesterinPostId.data.documentId}`,
+    {
+      disable_web_page_preview: true
+    });
+    const hairStylesPostId = await generateAndPostHairStyles();
+    await bot.sendMessage(
+    ADMIN_CHAT_ID,
+`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅HairStylesForSeniors✅
+
+Title: ${hairStylesPostId.data.title}
+
+https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
+    {
+      disable_web_page_preview: true
+    });
 })
 
 

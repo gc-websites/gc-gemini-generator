@@ -284,7 +284,7 @@ const strapiPost = async (obj) => {
         const err = await strapiRes.text()
         throw new Error(err)
       }
-      return obj;
+      return strapiRes.json();
     } catch (err) {
       console.error('❌ Create-post error:', err)
       return err.message;
@@ -302,7 +302,7 @@ const generateAndPost = async () => {
       const prepForPushRes = await prepForPush(imageIds, globalObj);
       console.log('обєкт змінено')
       const isPostedToStrapi = await strapiPost(prepForPushRes);
-      return prepForPushRes;
+      return isPostedToStrapi;
   
       // const imageids = await generateImages(result);
       // const resultToStrapiPost = await prepForPush(result, imageids, categoryId);
