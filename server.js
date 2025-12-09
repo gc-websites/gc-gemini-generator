@@ -3,12 +3,12 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import crypto from "crypto";
 import cron from 'node-cron';
-import {generateAndPost} from './functions.js';
+import {generateAndPost, postUserEmail} from './functions.js';
 import { generateImg, generateProduct, generateRefLink, getTag, getTags, postToStrapi, updateTagFbclid, updateTagStatus } from './functionsForProducts.js';
 import { generateAndPostCholesterin} from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
 import { tagCreator } from './tagCreator.js';
-import { createTelegramBot } from "./tgBot.js";
+// import { createTelegramBot } from "./tgBot.js";
 
 const server = express();
 const PORT = process.env.PORT || 4000;
@@ -36,7 +36,7 @@ const corsOptions = {
 server.use(express.json());
 server.use(cors());
 
-const bot = createTelegramBot(TG_TOKEN);
+// const bot = createTelegramBot(TG_TOKEN);
 
 server.post("/send", async (req, res) => {
   const { chatId, message } = req.body;
@@ -50,82 +50,63 @@ server.post("/send", async (req, res) => {
 });
 
 
-let isRunning = false;
-cron.schedule('0 0,12 * * *', async () => {
-  if (isRunning) {
-    console.log('generateAndPost already running — skipping this run.');
-    return;
-  }
-  isRunning = true;
-  try {
-    console.log('Scheduled job start:', new Date().toISOString());
-    const niceAdvicePostId = await generateAndPost();
-    await bot.sendMessage(
-    ADMIN_CHAT_ID,
-`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-✅NiceAdvice✅
+// let isRunning = false;
+// cron.schedule('0 0,12 * * *', async () => {
+//   if (isRunning) {
+//     console.log('generateAndPost already running — skipping this run.');
+//     return;
+//   }
+//   isRunning = true;
+//   try {
+//     console.log('Scheduled job start:', new Date().toISOString());
+//     const niceAdvicePostId = await generateAndPost();
+//     await bot.sendMessage(
+//     ADMIN_CHAT_ID,
+// `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+// ✅NiceAdvice✅
 
-Title:  ${niceAdvicePostId.data.title}
+// Title:  ${niceAdvicePostId.data.title}
 
-https://nice-advice.info/post/${niceAdvicePostId.data.documentId}`,
-    {
-      disable_web_page_preview: true
-    });
-    const cholesterinPostId = await generateAndPostCholesterin();
-    await bot.sendMessage(
-    ADMIN_CHAT_ID,
-`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-✅CholesterinTipps✅
+// https://nice-advice.info/post/${niceAdvicePostId.data.documentId}`,
+//     {
+//       disable_web_page_preview: true
+//     });
+//     const cholesterinPostId = await generateAndPostCholesterin();
+//     await bot.sendMessage(
+//     ADMIN_CHAT_ID,
+// `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+// ✅CholesterinTipps✅
 
-Title: ${cholesterinPostId.data.title}
+// Title: ${cholesterinPostId.data.title}
 
-https://cholesterintipps.de/post/${cholesterinPostId.data.documentId}`,
-    {
-      disable_web_page_preview: true
-    });
-    const hairStylesPostId = await generateAndPostHairStyles();
-    await bot.sendMessage(
-    ADMIN_CHAT_ID,
-`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-✅HairStylesForSeniors✅
+// https://cholesterintipps.de/post/${cholesterinPostId.data.documentId}`,
+//     {
+//       disable_web_page_preview: true
+//     });
+//     const hairStylesPostId = await generateAndPostHairStyles();
+//     await bot.sendMessage(
+//     ADMIN_CHAT_ID,
+// `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+// ✅HairStylesForSeniors✅
 
-Title: ${hairStylesPostId.data.title}
+// Title: ${hairStylesPostId.data.title}
 
-https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
-    {
-      disable_web_page_preview: true
-    });
-    console.log('Scheduled job end:', new Date().toISOString());
-  } catch (err) {
-    console.error('Scheduled job error:', err);
-  } finally {
-    isRunning = false;
-  }
-}, {
-  timezone: 'Europe/Kiev'
-});
+// https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
+//     {
+//       disable_web_page_preview: true
+//     });
+//     console.log('Scheduled job end:', new Date().toISOString());
+//   } catch (err) {
+//     console.error('Scheduled job error:', err);
+//   } finally {
+//     isRunning = false;
+//   }
+// }, {
+//   timezone: 'Europe/Kiev'
+// });
 server.post('/generate-post', async (req, res) => {
   generateAndPost();
 });
-
-// server.post('/generate-posts', async (req, res) => {
-//   const {topics} = req.body;
-//   const results = [];
-//   for(const query of topics){
-//     try{
-//       console.log(`⚡ Начинаю обработку темы: "${query}"`);
-//       const result = await generateGlobalObj(query);
-//       const imageids = await generateImages(result);
-//       const resultToStrapiPost = await prepForPush(result, imageids);
-//       const isPostedToStrapi = await strapiPost(resultToStrapiPost);
-//       results.push({ query, status: 'ok', result: isPostedToStrapi });
-//     }catch(error){
-//       console.error(`❌ Ошибка при обработке "${query}"`, error);
-//       results.push({ query, status: 'error', error: error.message });
-//     }
-//   }
-//   res.json(results);
-// });
 
 server.post('/generate-product', async (req, res) => {
   const {query, link, country} = req.body;
@@ -252,6 +233,11 @@ https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
     });
 })
 
+server.post('/email', async (req, res) => {
+  const {email, source} = req.body;
+  const result = await postUserEmail(email, source);
+  res.send(result);
+})
 
 server.listen(PORT, () => {
   console.log(`Server started: http://localhost:${PORT}`);

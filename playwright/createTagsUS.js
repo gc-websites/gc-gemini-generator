@@ -5,7 +5,7 @@ function uuidLite() {
 }
 
 export async function createTagUS() {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: false });
   const context = await browser.newContext({
     storageState: './playwright/amazon-sessionUS.json'
   });

@@ -315,4 +315,25 @@ const generateAndPost = async () => {
     }
 }
 
-export {generateGlobalObj, generateImages, generateQuery, prepForPush, strapiPost, generateAndPost};
+const postUserEmail = async (email, source) => {
+  try {
+      const strapiRes = await fetch(`${STRAPI_API_URL}/api/emails`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: STRAPI_TOKEN,
+        },
+        body: JSON.stringify({ data: {email: email, source: source} }),
+      })
+      if (!strapiRes.ok) {
+        const err = await strapiRes.text()
+        throw new Error(err)
+      }
+      return true;
+    } catch (err) {
+      console.error('❌ Create-post error:', err)
+      return err.message;
+    }
+}
+
+export {generateGlobalObj, generateImages, generateQuery, prepForPush, strapiPost, generateAndPost, postUserEmail};
