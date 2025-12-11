@@ -5,22 +5,22 @@ function uuidLite() {
 }
 
 export async function createTagCA() {
-  const browser = await chromium.launch({ headless: false });
-  const context = await browser.newContext({
-    storageState: './playwright/amazon-sessionCA.json'
+  const context = await chromium.launchPersistentContext("./playwright/amazon-ca-session", {
+    headless: false
   });
 
   const page = await context.newPage();
-
-  console.log('➡️ Переходим на Amazon Tag Manager...');
-  await page.goto('https://associates.amazon.ca/home/account/tag/manage', {
-    waitUntil: 'networkidle'
+  await page.goto("https://associates.amazon.ca/home/account/tag/manage", {
+    waitUntil: "networkidle"
   });
+  console.log("LANDING URL:", page.url());
 
 
-  if (page.url().includes('signin')) {
+  // Проверяем реальный URL Amazon login
+  const currentUrl = page.url();
+  if (currentUrl.includes("signin") || currentUrl.includes("ap/signin")) {
     console.log('❌ Сессия недействительна — нужно заново залогиниться');
-    await browser.close();
+    await context.close();
     return {
       ok: false,
       tag: null,
@@ -76,8 +76,6 @@ export async function createTagCA() {
     result.message = 'unknown status, Amazon did not respond';
   }
 
-  await browser.close();
-  return result;   // <===== ВОТ ЭТО ТЫ И ХОТЕЛ
+  await context.close();
+  return result;
 }
-
-// createTagCA().then(console.log);
