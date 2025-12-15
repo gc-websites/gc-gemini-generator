@@ -5,22 +5,22 @@ function uuidLite() {
 }
 
 export async function createTagUS() {
-  const browser = await chromium.launch({ headless: false });
-  const context = await browser.newContext({
-    storageState: './playwright/amazon-sessionUS.json'
+  const context = await chromium.launchPersistentContext("./playwright/amazon-us-session", {
+    headless: false
   });
 
   const page = await context.newPage();
-
-  console.log('➡️ Переходим на Amazon Tag Manager...');
-  await page.goto('https://affiliate-program.amazon.com/home/account/tag/manage', {
-    waitUntil: 'networkidle'
+  await page.goto("https://affiliate-program.amazon.com/home/account/tag/manage", {
+    waitUntil: "networkidle"
   });
+  console.log("LANDING URL:", page.url());
 
-  // Проверяем сессию
-  if (page.url().includes('signin')) {
+
+  // Проверяем реальный URL Amazon login
+  const currentUrl = page.url();
+  if (currentUrl.includes("signin") || currentUrl.includes("ap/signin")) {
     console.log('❌ Сессия недействительна — нужно заново залогиниться');
-    await browser.close();
+    await context.close();
     return {
       ok: false,
       tag: null,
@@ -30,27 +30,22 @@ export async function createTagUS() {
 
   console.log('✔️ Сессия активна');
 
-  // Жмём Add Tracking ID
   const addButton = page.locator('button#a-autoid-2-announce');
   await addButton.waitFor({ timeout: 15000 });
   await addButton.click();
 
-  // Ожидаем модалку
   const modal = page.locator('#a-popover-1');
   await modal.waitFor({ timeout: 15000 });
 
-  // Ищем input
   const input = page.locator('#ac-tag-create-tag_name');
   await input.waitFor({ timeout: 10000 });
 
-  // Генерируем субтег
   const subtag = `subtag-${uuidLite()}`;
   console.log('➡️ Генерируем субтег:', subtag);
 
   await input.fill(subtag);
   await input.evaluate(el => el.blur());
 
-  // Жмём Create
   const createWrapper = page.locator('span[data-action="ac-tag-create-action"]');
   await createWrapper.waitFor({ timeout: 10000 });
 
@@ -58,19 +53,16 @@ export async function createTagUS() {
   await page.waitForTimeout(500);
   await createBtn.click({ force: true });
 
-  // Блоки результата
   const successBox = page.locator('#ac-tag-new-container', { hasText: 'created successfully' });
   const suggestionBox = page.locator('#ac-tag-suggestion-container');
   const errorBox = page.locator('#ac-tag-create-error-container');
 
-  // Ждём что сработает первым
   await Promise.race([
     successBox.waitFor({ timeout: 15000 }).catch(() => null),
     suggestionBox.waitFor({ timeout: 15000 }).catch(() => null),
     errorBox.waitFor({ timeout: 15000 }).catch(() => null),
   ]);
 
-  // Формируем результат
   let result = { ok: false, tag: subtag, message: null };
 
   if (await successBox.isVisible()) {
@@ -84,7 +76,6 @@ export async function createTagUS() {
     result.message = 'unknown status, Amazon did not respond';
   }
 
-  // Закрываем браузер и возвращаем
-  await browser.close();
+  await context.close();
   return result;
 }
