@@ -23,7 +23,8 @@
     "nanoid": "^5.1.6",
     "node-cron": "^4.2.1",
     "node-telegram-bot-api": "^0.66.0",
-    "paapi5-nodejs-sdk": "^1.1.0"
+    "paapi5-nodejs-sdk": "^1.1.0",
+    "request-ip": "^3.3.0"
   },
   "devDependencies": {
     "playwright": "^1.56.1"

@@ -9,6 +9,7 @@ import { generateAndPostCholesterin} from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
 import { tagCreator } from './tagCreator.js';
 import { createTelegramBot } from "./tgBot.js";
+import requestIp from 'request-ip';
 
 const server = express();
 const PORT = process.env.PORT || 4000;
@@ -36,7 +37,7 @@ const corsOptions = {
 }
 
 server.use(express.json());
-server.use(cors());
+server.use(cors(corsOptions));
 
 const bot = createTelegramBot(TG_TOKEN);
 
@@ -197,48 +198,8 @@ server.post('/fbclid', async (req, res) => {
 })
 
 server.get('/test', async (req, res) => {
-  const niceAdvicePostId = await generateAndPost();
-    await bot.sendMessage(
-    ADMIN_CHAT_ID,
-`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-✅NiceAdvice✅
-
-Title:  ${niceAdvicePostId.data.title}
-
-https://nice-advice.info/post/${niceAdvicePostId.data.documentId}`,
-    {
-      disable_web_page_preview: true
-    });
-    const cholesterinPostId = await generateAndPostCholesterin();
-    await bot.sendMessage(
-    ADMIN_CHAT_ID,
-`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-✅CholesterinTipps✅
-
-Title: ${cholesterinPostId.data.title}
-
-https://cholesterintipps.de/post/${cholesterinPostId.data.documentId}`,
-    {
-      disable_web_page_preview: true
-    });
-    const hairStylesPostId = await generateAndPostHairStyles();
-    await bot.sendMessage(
-    ADMIN_CHAT_ID,
-`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-✅HairStylesForSeniors✅
-
-Title: ${hairStylesPostId.data.title}
-
-https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
-    {
-      disable_web_page_preview: true
-    });
-})
-
-server.post('/email', async (req, res) => {
-  const {email, source} = req.body;
-  const result = await postUserEmail(email, source);
-  res.send(result);
+  const ip = requestIp.getClientIp(req);
+  res.send(ip);
 })
 
 server.listen(PORT, () => {
