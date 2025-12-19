@@ -199,11 +199,7 @@ server.post('/fbclid', async (req, res) => {
 })
 
 server.get('/test', async (req, res) => {
-  res.json({
-    ip: requestIp.getClientIp(req),
-    xForwardedFor: req.headers['x-forwarded-for'],
-    remote: req.socket.remoteAddress
-  })
+  res.json(req.headers);
 })
 
 server.listen(PORT, () => {
