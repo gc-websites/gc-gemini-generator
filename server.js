@@ -200,7 +200,8 @@ server.post('/fbclid', async (req, res) => {
 
 server.get('/test', async (req, res) => {
   const ip = requestIp.getClientIp(req);
-  res.json(ip);
+  const userAgent = req.get('user-agent')
+  res.json({ip: ip, userAgent: userAgent});
 })
 
 server.listen(PORT, () => {
