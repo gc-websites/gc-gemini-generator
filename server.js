@@ -199,7 +199,8 @@ server.post('/fbclid', async (req, res) => {
 })
 
 server.get('/test', async (req, res) => {
-  res.json(req.headers);
+  const ip = requestIp.getClientIp(req);
+  res.json(ip);
 })
 
 server.listen(PORT, () => {
