@@ -38,6 +38,7 @@ const corsOptions = {
 
 server.use(express.json());
 server.use(cors(corsOptions));
+server.set('trust proxy', true);
 
 const bot = createTelegramBot(TG_TOKEN);
 
@@ -198,8 +199,11 @@ server.post('/fbclid', async (req, res) => {
 })
 
 server.get('/test', async (req, res) => {
-  const ip = requestIp.getClientIp(req);
-  res.send(ip);
+  res.json({
+    ip: requestIp.getClientIp(req),
+    xForwardedFor: req.headers['x-forwarded-for'],
+    remote: req.socket.remoteAddress
+  })
 })
 
 server.listen(PORT, () => {
