@@ -8,7 +8,7 @@ import { generateImg, generateProduct, generateRefLink, getTag, getTags, leadPus
 import { generateAndPostCholesterin} from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
 import { tagCreator } from './tagCreator.js';
-// import { createTelegramBot } from "./tgBot.js";
+import { createTelegramBot } from "./tgBot.js";
 import requestIp from 'request-ip';
 
 const server = express();
@@ -40,7 +40,7 @@ server.use(express.json());
 server.use(cors(corsOptions));
 server.set('trust proxy', true);
 
-// const bot = createTelegramBot(TG_TOKEN);
+const bot = createTelegramBot(TG_TOKEN);
 
 server.post("/send", async (req, res) => {
   const { chatId, message } = req.body;
@@ -54,60 +54,60 @@ server.post("/send", async (req, res) => {
 });
 
 
-// let isRunning = false;
-// cron.schedule('0 0,12 * * *', async () => {
-//   if (isRunning) {
-//     console.log('generateAndPost already running — skipping this run.');
-//     return;
-//   }
-//   isRunning = true;
-//   try {
-//     console.log('Scheduled job start:', new Date().toISOString());
-//     const niceAdvicePostId = await generateAndPost();
-//     await bot.sendMessage(
-//     ADMIN_CHAT_ID,
-// `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-// ✅NiceAdvice✅
+let isRunning = false;
+cron.schedule('0 0,12 * * *', async () => {
+  if (isRunning) {
+    console.log('generateAndPost already running — skipping this run.');
+    return;
+  }
+  isRunning = true;
+  try {
+    console.log('Scheduled job start:', new Date().toISOString());
+    const niceAdvicePostId = await generateAndPost();
+    await bot.sendMessage(
+    ADMIN_CHAT_ID,
+`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅NiceAdvice✅
 
-// Title:  ${niceAdvicePostId.data.title}
+Title:  ${niceAdvicePostId.data.title}
 
-// https://nice-advice.info/post/${niceAdvicePostId.data.documentId}`,
-//     {
-//       disable_web_page_preview: true
-//     });
-//     const cholesterinPostId = await generateAndPostCholesterin();
-//     await bot.sendMessage(
-//     ADMIN_CHAT_ID,
-// `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-// ✅CholesterinTipps✅
+https://nice-advice.info/post/${niceAdvicePostId.data.documentId}`,
+    {
+      disable_web_page_preview: true
+    });
+    const cholesterinPostId = await generateAndPostCholesterin();
+    await bot.sendMessage(
+    ADMIN_CHAT_ID,
+`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅CholesterinTipps✅
 
-// Title: ${cholesterinPostId.data.title}
+Title: ${cholesterinPostId.data.title}
 
-// https://cholesterintipps.de/post/${cholesterinPostId.data.documentId}`,
-//     {
-//       disable_web_page_preview: true
-//     });
-//     const hairStylesPostId = await generateAndPostHairStyles();
-//     await bot.sendMessage(
-//     ADMIN_CHAT_ID,
-// `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-// ✅HairStylesForSeniors✅
+https://cholesterintipps.de/post/${cholesterinPostId.data.documentId}`,
+    {
+      disable_web_page_preview: true
+    });
+    const hairStylesPostId = await generateAndPostHairStyles();
+    await bot.sendMessage(
+    ADMIN_CHAT_ID,
+`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅HairStylesForSeniors✅
 
-// Title: ${hairStylesPostId.data.title}
+Title: ${hairStylesPostId.data.title}
 
-// https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
-//     {
-//       disable_web_page_preview: true
-//     });
-//     console.log('Scheduled job end:', new Date().toISOString());
-//   } catch (err) {
-//     console.error('Scheduled job error:', err);
-//   } finally {
-//     isRunning = false;
-//   }
-// }, {
-//   timezone: 'Europe/Kiev'
-// });
+https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
+    {
+      disable_web_page_preview: true
+    });
+    console.log('Scheduled job end:', new Date().toISOString());
+  } catch (err) {
+    console.error('Scheduled job error:', err);
+  } finally {
+    isRunning = false;
+  }
+}, {
+  timezone: 'Europe/Kiev'
+});
 
 server.post('/generate-post', async (req, res) => {
   generateAndPost();
@@ -205,7 +205,7 @@ server.post('/get-trackingId', async (req, res) => {
   res.json(tagFromStrapi);
 })
 
-server.post('/test', async (req, res) => {
+server.post('/lead', async (req, res) => {
   const {productId, fbp, fbc, trackingId, trackingDocId, country} = req.body;
   const ip = requestIp.getClientIp(req);
   const userAgent = req.get('user-agent')
