@@ -206,7 +206,7 @@ server.post('/get-trackingId', async (req, res) => {
 })
 
 server.post('/test', async (req, res) => {
-  const {productId, fbp, fbc, trackingId} = req.body;
+  const {productId, fbp, fbc, trackingId, trackingDocId, country} = req.body;
   const ip = requestIp.getClientIp(req);
   const userAgent = req.get('user-agent')
   const lead = {
@@ -218,7 +218,7 @@ server.post('/test', async (req, res) => {
     fbc: null,
     trackingId: null,
     event_name: 'Lead',
-    event_time: null,
+    event_time: `${Math.floor(Date.now() / 1000)}`,
     event_id: crypto.randomUUID(),
     event_source_url: 'https://nice-advice.info',
     action_source: 'website'
@@ -229,8 +229,9 @@ server.post('/test', async (req, res) => {
   lead.client_ip_address = ip;
   lead.client_user_agent = userAgent;
   lead.trackingId = trackingId;
-  const strapiRes = leadPushStrapi(lead);
-  res.json(strapiRes);
+  const strapiRes = await leadPushStrapi(lead);
+  const isUpdated = await updateTagStatus(trackingDocId, country);
+  res.json(isUpdated);
 })
 
 server.listen(PORT, () => {

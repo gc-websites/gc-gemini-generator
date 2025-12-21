@@ -168,7 +168,7 @@ const postToStrapi = async (product) => {
       }
 }
 
-const updateTagStatus = async (tag, country) => {
+const updateTagStatus = async (tagDocId, country) => {
   let collection;
   if (country === 'USA') {
     collection = "taguses";
@@ -176,7 +176,7 @@ const updateTagStatus = async (tag, country) => {
     collection = "tagcas";
   }
 
-  const updateUrl = `${STRAPI_API_URL}/api/${collection}/${tag.documentId}`;
+  const updateUrl = `${STRAPI_API_URL}/api/${collection}/${tagDocId}`;
   const updateRes = await fetch(updateUrl, {
       method: "PUT",
       headers: {
@@ -235,7 +235,7 @@ const getTag = async (country) => {
   }
 };
 
-const updateTagFbclid = async (fbclid, productId, tag, tagId) => {
+const updateTagFbclid = async (productId, tag, tagId) => {
   let endpoint;
 
   // Определяем коллекцию по типу тега
@@ -253,8 +253,8 @@ const updateTagFbclid = async (fbclid, productId, tag, tagId) => {
   // Тело обновления
   const body = {
     data: {
-      fbclid,
-      productId
+      productId,
+      isUsed
     }
   };
 
