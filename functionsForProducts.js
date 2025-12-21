@@ -200,18 +200,18 @@ const updateTagStatus = async (tag, country) => {
 
 }
 
-const getTag = async (tag) => {
+const getTag = async (country) => {
   let endpoint;
 
-  if (tag.startsWith("subtag-")) {
+  if (country === 'USA') {
     endpoint = "taguses";
-  } else if (tag.startsWith("subtagcan-")) {
+  } else if (country === 'CA') {
     endpoint = "tagcas";
   } else {
     throw new Error("Unsupported tag format");
   }
 
-  const url = `${STRAPI_API_URL}/api/${endpoint}?filters[name][$eq]=${tag}`;
+  const url = `${STRAPI_API_URL}/api/${endpoint}?filters[isUsed][$eq]=false&sort=createdAt:asc`;
 
   try {
     const res = await fetch(url, {
@@ -282,6 +282,28 @@ const updateTagFbclid = async (fbclid, productId, tag, tagId) => {
   }
 };
 
+const leadPushStrapi = async (lead) => {
+  try {
+        const strapiRes = await fetch(`${STRAPI_API_URL}/api/leads`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: STRAPI_TOKEN,
+          },
+          body: JSON.stringify({ data: lead }),
+        })
+        if (!strapiRes.ok) {
+          const err = await strapiRes.text()
+          throw new Error(err)
+        }
+        const result = await strapiRes.json();
+        return result.data.documentId;
+      } catch (err) {
+        console.error('❌ Create-post error:', err)
+        return err.message;
+      }
+}
 
 
-export {generateProduct, generateImg, postToStrapi, getTags, generateRefLink, updateTagStatus, getTag, updateTagFbclid};
+
+export {generateProduct, generateImg, postToStrapi, getTags, generateRefLink, updateTagStatus, getTag, updateTagFbclid, leadPushStrapi};
