@@ -143,12 +143,12 @@ server.post('/generate-product', async (req, res) => {
   // console.log('Tag status updated');
   // const createTagRes = await tagCreator(country);
   // console.log('New tag created');
-  // if(createTagRes){
-  //   res.json({id: postId});
-  // }
-  // else{
-  //   res.json({error: 'ERROR'});
-  // }
+  if(postId){
+    res.json({id: postId});
+  }
+  else{
+    res.json({error: 'ERROR'});
+  }
 })
 
 server.get('/get-product/:id', async (req, res) => {
