@@ -29,7 +29,7 @@ const corsOptions = {
 		'https://www.nice-advice.info',
     'http://localhost:5173',
     'https://cholesterintipps.de',
-    'https://dev.nice-advice.info',
+    'http://localhost:4000',
     'https://www.dev.nice-advice.info',
 	],
 	credentials: true,
@@ -118,7 +118,7 @@ server.post('/generate-product', async (req, res) => {
   //const tag = await getTags(country);
   //console.log('Tag created');
   //const refLink = await generateRefLink(link, tag.name);
-  console.log('RefLink Created');
+  // console.log('RefLink Created');
   const product = {
     title: '',
     descriptionfield1: '',
@@ -127,6 +127,7 @@ server.post('/generate-product', async (req, res) => {
     descriptionfield4: '',
     image: '',
     link: link,
+    country: country
   }
   const result = await generateProduct(query);
   console.log('BodyProductGenerated');
