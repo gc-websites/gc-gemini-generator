@@ -304,6 +304,24 @@ const leadPushStrapi = async (lead) => {
       }
 }
 
+const resetOldTags = async () => {
+  const date48hAgo = new Date(
+    Date.now() - 48 * 60 * 60 * 1000
+  ).toISOString();
+  const url =
+  `${STRAPI_API_URL}/api/taguses` +
+  `?filters[isUsed][$eq]=true` +
+  `&filters[updatedAt][$lt]=${encodeURIComponent(date48hAgo)}`;
+  const res = await fetch(url, {
+  headers: {
+    Authorization: STRAPI_TOKEN,
+  },
+  });
+
+  const json = await res.json();
+  return json;
+}
 
 
-export {generateProduct, generateImg, postToStrapi, getTags, generateRefLink, updateTagStatus, getTag, updateTagFbclid, leadPushStrapi};
+
+export {generateProduct, generateImg, postToStrapi, getTags, generateRefLink, updateTagStatus, getTag, updateTagFbclid, leadPushStrapi, resetOldTags};

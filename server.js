@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import crypto from "crypto";
 import cron from 'node-cron';
 import {generateAndPost, postUserEmail} from './functions.js';
-import { generateImg, generateProduct, generateRefLink, getTag, getTags, leadPushStrapi, postToStrapi, updateTagFbclid, updateTagStatus } from './functionsForProducts.js';
+import { generateImg, generateProduct, generateRefLink, getTag, getTags, leadPushStrapi, postToStrapi, resetOldTags, updateTagFbclid, updateTagStatus } from './functionsForProducts.js';
 import { generateAndPostCholesterin} from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
 import { tagCreator } from './tagCreator.js';
@@ -232,6 +232,45 @@ server.post('/lead', async (req, res) => {
   const strapiRes = await leadPushStrapi(lead);
   const isUpdated = await updateTagStatus(trackingDocId, country);
   res.json(isUpdated);
+})
+
+
+cron.schedule('0 * * * *', async () => {
+  try {
+    console.log('[CRON][TAGS] start resetOldUsedTags');
+
+    const res = await fetch(
+      `${STRAPI_API_URL}/api/tagus/reset-old-used`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: STRAPI_TOKEN,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ hours: 48 }),
+      }
+    );
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Strapi error ${res.status}: ${text}`);
+    }
+
+    const data = await res.json();
+    console.log(
+      '[CRON][TAGS] done, threshold:',
+      data.thresholdDate
+    );
+  } catch (err) {
+    console.error('[CRON][TAGS] error:', err.message);
+  }
+});
+
+
+server.get('/test', async (req, res) => {
+  const result = await resetOldTags();
+  console.log(result);
+  res.json(result);
 })
 
 server.listen(PORT, () => {
