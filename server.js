@@ -12,7 +12,6 @@ import { createTelegramBot } from "./tgBot.js";
 import requestIp from 'request-ip';
 import { ParseAmazonOrders } from './playwright/getEarningsData.js';
 import { applyCommissionsToPurchases, attachOrdersToLeads, createPurchasesToStrapi, filterNewPurchases, getAmznComissionsFromStrapi, getLeadsFromStrapi, getPurchasesFromStrapiLast24h, getUnusedPurchasesFromStrapi, postPurchasesToStrapi, sendPurchasesToFacebookAndMarkUsed} from './functionsForTracking.js';
-import { ordersFromAmzn } from './fakedata.js';
 
 const server = express();
 const PORT = process.env.PORT || 4000;
