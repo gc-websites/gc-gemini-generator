@@ -10,6 +10,9 @@ import { generateAndPostHairStyles } from './functionsHairStyles.js';
 import { tagCreator } from './tagCreator.js';
 import { createTelegramBot } from "./tgBot.js";
 import requestIp from 'request-ip';
+import { ParseAmazonOrders } from './playwright/getEarningsData.js';
+import { applyCommissionsToPurchases, attachOrdersToLeads, createPurchasesToStrapi, filterNewPurchases, getAmznComissionsFromStrapi, getLeadsFromStrapi, getPurchasesFromStrapiLast24h, getUnusedPurchasesFromStrapi, postPurchasesToStrapi, sendPurchasesToFacebookAndMarkUsed} from './functionsForTracking.js';
+import { ordersFromAmzn } from './fakedata.js';
 
 const server = express();
 const PORT = process.env.PORT || 4000;
@@ -20,6 +23,7 @@ const STRAPI_TOKEN = process.env.STRAPI_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const TG_TOKEN = process.env.TG_TOKEN;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
+const TG_BOT_ORDERS_ID = process.env.TG_BOT_ORDERS_ID;
 const PIXEL_ID = process.env.PIXEL_ID;
 const PIXEL_TOKEN = process.env.PIXEL_TOKEN ;
 
@@ -29,7 +33,7 @@ const corsOptions = {
 		'https://www.nice-advice.info',
     'http://localhost:5173',
     'https://cholesterintipps.de',
-    'http://localhost:4000',
+    'https://dev.nice-advice.info',
     'https://www.dev.nice-advice.info',
 	],
 	credentials: true,
@@ -52,6 +56,17 @@ server.post("/send", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// bot.on("message", (msg) => {
+//   const chat = msg.chat;
+
+//   console.log({
+//     chatId: chat.id,
+//     type: chat.type,        // private | group | supergroup | channel
+//     title: chat.title,      // название группы / канала
+//     username: chat.username // если есть
+//   });
+// });
 
 
 let isRunning = false;
@@ -266,10 +281,58 @@ cron.schedule('0 * * * *', async () => {
   }
 });
 
+cron.schedule("0 * * * *", async () => {
+  const ordersFromAmazon = await ParseAmazonOrders();
+  const leadsFromStrapi = await getLeadsFromStrapi();
+  const matchedLeads = await attachOrdersToLeads(ordersFromAmazon, leadsFromStrapi);
+  const createdPurchasesForStrapi = await createPurchasesToStrapi(matchedLeads);
+  const comissions = await getAmznComissionsFromStrapi();
+  const purchasesToStrapi = await applyCommissionsToPurchases(createdPurchasesForStrapi, comissions);
+  const purchasesLast24h = await getPurchasesFromStrapiLast24h();
+  const newPurchases = await filterNewPurchases(purchasesToStrapi, purchasesLast24h)
+  let result;
+  if(newPurchases.length>0){
+    result = await postPurchasesToStrapi(newPurchases);
+  }
+  const unusedPurchases = await getUnusedPurchasesFromStrapi();
+  const sendedToFbPurchases = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
+  const message = sendedToFbPurchases
+  .map(p =>
+    `• ID: ${p.id}\n  ASIN: ${p.asin}\n  Tracking: ${p.trackingId}`
+  )
+  .join("\n\n");
+
+  if(sendedToFbPurchases.length>0){
+    await bot.sendMessage(
+  TG_BOT_ORDERS_ID,
+`⭐️⭐️⭐️ NEW ORDERS ⭐️⭐️⭐️
+
+New orders sent to Facebook:
+${message}
+`
+  
+);
+  }
+
+});
+
 
 server.get('/test', async (req, res) => {
-  const result = await resetOldTags();
-  console.log(result);
+  // const ordersFromAmazon = await ParseAmazonOrders();
+  // const leadsFromStrapi = await getLeadsFromStrapi();
+  // const matchedLeads = await attachOrdersToLeads(ordersFromAmznn, leadsFromStrapi);
+  // const createdPurchasesForStrapi = await createPurchasesToStrapi(matchedLeads);
+  // const comissions = await getAmznComissionsFromStrapi();
+  // const purchasesToStrapi = await applyCommissionsToPurchases(createdPurchasesForStrapi, comissions);
+  // const purchasesLast24h = await getPurchasesFromStrapiLast24h();
+  // const newPurchases = await filterNewPurchases(purchasesToStrapi, purchasesLast24h)
+  // let result;
+  // if(newPurchases.length>0){
+  //   result = await postPurchasesToStrapi(newPurchases);
+  // }
+  // const unusedPurchases = await getUnusedPurchasesFromStrapi();
+  // const result = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
+  const result = generateAndPost();
   res.json(result);
 })
 
