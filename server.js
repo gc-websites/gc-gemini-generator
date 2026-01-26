@@ -288,32 +288,37 @@ cron.schedule("0 * * * *", async () => {
   const comissions = await getAmznComissionsFromStrapi();
   const purchasesToStrapi = await applyCommissionsToPurchases(createdPurchasesForStrapi, comissions);
   const purchasesLast24h = await getPurchasesFromStrapiLast24h();
-  const newPurchases = await filterNewPurchases(purchasesToStrapi, purchasesLast24h)
-  let result;
-  if(newPurchases.length>0){
-    result = await postPurchasesToStrapi(newPurchases);
+  const newPurchases = await filterNewPurchases(purchasesToStrapi, purchasesLast24h);
+
+  if (newPurchases.length > 0) {
+    await postPurchasesToStrapi(newPurchases);
   }
+
   const unusedPurchases = await getUnusedPurchasesFromStrapi();
   const sendedToFbPurchases = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
-  const message = sendedToFbPurchases
-  .map(p =>
-    `• ID: ${p.id}\n  ASIN: ${p.asin}\n  Tracking: ${p.trackingId}`
-  )
-  .join("\n\n");
 
-  if(sendedToFbPurchases.length>0){
+  const message = sendedToFbPurchases
+    .map(p => `
+• ID: ${p.id}
+  ASIN: ${p.asin}
+  Tracking: ${p.trackingId}
+  Title: ${p.title}
+  Value: ${p.value}
+`.trim())
+    .join("\n\n");
+
+  if (sendedToFbPurchases.length > 0) {
     await bot.sendMessage(
-  TG_BOT_ORDERS_ID,
+      TG_BOT_ORDERS_ID,
 `⭐️⭐️⭐️ NEW ORDERS ⭐️⭐️⭐️
 
 New orders sent to Facebook:
 ${message}
 `
-  
-);
+    );
   }
-
 });
+
 
 
 server.get('/test', async (req, res) => {
