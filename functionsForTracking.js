@@ -478,7 +478,7 @@ const sendPurchasesToFacebookAndMarkUsed = async (purchases) => {
         trackingId: purchase.trackingId,
         value: purchase.value,
         title: purchase.title,
-        commision: purchase.commision,
+        commission: purchase.commission,
         orderedCount: purchase.orderedCount,
         price: purchase.price,
         category: purchase.category,
