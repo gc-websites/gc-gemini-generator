@@ -302,8 +302,12 @@ cron.schedule("0 * * * *", async () => {
 • ID: ${p.id}
   ASIN: ${p.asin}
   Tracking: ${p.trackingId}
+  Price: ${p.price}$
+  Commision: ${p.commision}%
+  Ordered Count: ${p.orderedCount}
+  Category: ${p.category}
+  Value: ${p.value}$
   Title: ${p.title}
-  Value: ${p.value}
 `.trim())
     .join("\n\n");
 

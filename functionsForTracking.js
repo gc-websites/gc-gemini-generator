@@ -477,7 +477,11 @@ const sendPurchasesToFacebookAndMarkUsed = async (purchases) => {
         asin: purchase.ASIN,
         trackingId: purchase.trackingId,
         value: purchase.value,
-        title: purchase.title
+        title: purchase.title,
+        commision: purchase.commision,
+        orderedCount: purchase.orderedCount,
+        price: purchase.price,
+        category: purchase.category,
       });
 
     } catch (err) {
