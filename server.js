@@ -303,7 +303,7 @@ cron.schedule("0 * * * *", async () => {
   ASIN: ${p.asin}
   Tracking: ${p.trackingId}
   Price: ${p.price}$
-  Commision: ${p.commission}%
+  Commission: ${p.commission}%
   Ordered Count: ${p.orderedCount}
   Category: ${p.category}
   Value: ${p.value}$
