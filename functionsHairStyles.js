@@ -196,50 +196,101 @@ const generateGlobalObj = async (query, categoryId, category) => {
 }
 
 const generateImages = async (globalObj) => {
-  const img1 = `Create an image for an article on my website. The image must be of the highest quality, super realistic, without magic or non-existent objects. Make it as close to reality as possible. Here's the title of my article - ${globalObj.title}. Here is the description of my article - ${globalObj.description[0].children[0].text}. Here is the paragraph of my article - ${globalObj.paragraphs[0].description[0].children[0].text}. Create an image for this article based on this information. It should be realistic and reflective of real life.`;
-  const img2 = `Create an image for an article on my website. The image must be of the highest quality, super realistic, without magic or non-existent objects. Make it as close to reality as possible. Here's the title of my article - ${globalObj.title}. Here is the description of my article - ${globalObj.description[0].children[0].text}. Here is the paragraph of my article - ${globalObj.paragraphs[1].description[0].children[0].text}. Create an image for this article based on this information. It should be realistic and reflective of real life.`;
-  const img3 = `Create an image for an article on my website. The image must be of the highest quality, super realistic, without magic or non-existent objects. Make it as close to reality as possible. Here's the title of my article - ${globalObj.title}. Here is the description of my article - ${globalObj.description[0].children[0].text}. Create an image for this article based on this information. It should be realistic and reflective of real life.`;
-  const img4 = `Create an image for an article on my website. The image must be of the highest quality, super realistic, without magic or non-existent objects. Make it as close to reality as possible. Here's the title of my article - ${globalObj.title}. Here is the description of my article - ${globalObj.description[0].children[0].text}. Here is the first paragraph of my article - ${globalObj.paragraphs[0].description[0].children[0].text}. Here is the second paragraph of my article - ${globalObj.paragraphs[1].description[0].children[0].text}. Create an image for this article based on this information. It should be realistic and reflective of real life.`;
-  const img5 = `Create an image for an article on my website. The image must be of the highest quality, super realistic, without magic or non-existent objects. Make it as close to reality as possible. Here's the title of my article - ${globalObj.title}. Here is the description of my article - ${globalObj.description[0].children[0].text}. Here is the first paragraph of my article - ${globalObj.paragraphs[0].description[0].children[0].text}. Here is the second paragraph of my article - ${globalObj.paragraphs[1].description[0].children[0].text}. Create an image for this article based on this information. It should be realistic and reflective of real life.`;
-  const prompts = [img1, img2, img3, img4, img5];
+  const basePrompt = `
+Create an ultra-realistic photograph for a website article.
+The image must look like a real photo taken with a DSLR camera.
+No illustration, no CGI, no fantasy, no magic, no fictional objects.
+Natural lighting, real people, real environments, realistic everyday situations.
+`;
+
+  const prompts = [
+    `${basePrompt}
+Article title: ${globalObj.title}
+Article description: ${globalObj.description[0].children[0].text}
+Paragraph: ${globalObj.paragraphs[0].description[0].children[0].text}
+`,
+
+    `${basePrompt}
+Article title: ${globalObj.title}
+Article description: ${globalObj.description[0].children[0].text}
+Paragraph: ${globalObj.paragraphs[1].description[0].children[0].text}
+`,
+
+    `${basePrompt}
+Article title: ${globalObj.title}
+Article description: ${globalObj.description[0].children[0].text}
+`,
+
+    `${basePrompt}
+Article title: ${globalObj.title}
+Article description: ${globalObj.description[0].children[0].text}
+First paragraph: ${globalObj.paragraphs[0].description[0].children[0].text}
+Second paragraph: ${globalObj.paragraphs[1].description[0].children[0].text}
+`,
+
+    `${basePrompt}
+Article title: ${globalObj.title}
+Article description: ${globalObj.description[0].children[0].text}
+First paragraph: ${globalObj.paragraphs[0].description[0].children[0].text}
+Second paragraph: ${globalObj.paragraphs[1].description[0].children[0].text}
+`
+  ];
+
   const ids = [];
-  
+
   for (let i = 0; i < prompts.length; i++) {
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-image-preview",
-    contents: prompts[i],
-    generationConfig: { candidateCount: 1 },
-  });
+    try {
+      const response = await ai.models.generateImages({
+        model: "imagen-4.0-generate-001",
+        prompt: prompts[i],
+        config: {
+          numberOfImages: 1,
+          aspectRatio: "1:1",
+          outputMimeType: "image/png",
+        },
+      });
 
-  const part = response.candidates[0].content.parts.find((p) => p.inlineData);
-  if (!part) continue;
+      const generated = response.generatedImages?.[0];
+      if (!generated?.image?.imageBytes) {
+        console.warn(`⚠️ No image data for image ${i + 1}`, response);
+        continue;
+      }
 
-  const buffer = Buffer.from(part.inlineData.data, "base64");
+      const buffer = Buffer.from(
+        generated.image.imageBytes,
+        "base64"
+      );
 
-  const formData = new FormData();
-  formData.append("files", buffer, {
-    filename: `gemini-image-${i + 1}.png`,
-    contentType: "image/png",
-  });
+      const formData = new FormData();
+      formData.append("files", buffer, {
+        filename: `imagen-article-${i + 1}.png`,
+        contentType: "image/png",
+      });
 
-  const uploadRes = await fetch(`${STRAPI_API_URL}/api/upload`, {
-    method: "POST",
-    headers: {
-      Authorization: STRAPI_TOKEN,
-    },
-    body: formData,
-  });
+      const uploadRes = await fetch(`${STRAPI_API_URL}/api/upload`, {
+        method: "POST",
+        headers: {
+          Authorization: STRAPI_TOKEN,
+        },
+        body: formData,
+      });
 
-  const result = await uploadRes.json();
-  if (Array.isArray(result) && result[0]?.id) {
-      ids.push(result[0].id);
-      console.log(`✅ Uploaded image ${i + 1} to Strapi: id=${result[0].id}`);
-    } else {
-      console.warn(`⚠️ No id found for image ${i + 1}`, result);
+      const result = await uploadRes.json();
+
+      if (Array.isArray(result) && result[0]?.id) {
+        ids.push(result[0].id);
+        console.log(`✅ Uploaded image ${i + 1} to Strapi: id=${result[0].id}`);
+      } else {
+        console.warn(`⚠️ No id found for image ${i + 1}`, result);
+      }
+    } catch (err) {
+      console.error(`❌ Error generating image ${i + 1}`, err);
     }
-}
-return ids;
-}
+  }
+
+  return ids;
+};
+
 
 const prepForPush = async (ids, obj) => {
   const editedObj = obj;
