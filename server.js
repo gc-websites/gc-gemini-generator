@@ -322,21 +322,20 @@ ${message}
 
 
 server.get('/test', async (req, res) => {
-  // const ordersFromAmazon = await ParseAmazonOrders();
-  // const leadsFromStrapi = await getLeadsFromStrapi();
-  // const matchedLeads = await attachOrdersToLeads(ordersFromAmznn, leadsFromStrapi);
-  // const createdPurchasesForStrapi = await createPurchasesToStrapi(matchedLeads);
-  // const comissions = await getAmznComissionsFromStrapi();
-  // const purchasesToStrapi = await applyCommissionsToPurchases(createdPurchasesForStrapi, comissions);
-  // const purchasesLast24h = await getPurchasesFromStrapiLast24h();
-  // const newPurchases = await filterNewPurchases(purchasesToStrapi, purchasesLast24h)
-  // let result;
-  // if(newPurchases.length>0){
-  //   result = await postPurchasesToStrapi(newPurchases);
-  // }
-  // const unusedPurchases = await getUnusedPurchasesFromStrapi();
-  // const result = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
-  const result = generateAndPost();
+  const ordersFromAmazon = await ParseAmazonOrders();
+  const leadsFromStrapi = await getLeadsFromStrapi();
+  const matchedLeads = await attachOrdersToLeads(ordersFromAmznn, leadsFromStrapi);
+  const createdPurchasesForStrapi = await createPurchasesToStrapi(matchedLeads);
+  const comissions = await getAmznComissionsFromStrapi();
+  const purchasesToStrapi = await applyCommissionsToPurchases(createdPurchasesForStrapi, comissions);
+  const purchasesLast24h = await getPurchasesFromStrapiLast24h();
+  const newPurchases = await filterNewPurchases(purchasesToStrapi, purchasesLast24h)
+  let result;
+  if(newPurchases.length>0){
+    result = await postPurchasesToStrapi(newPurchases);
+  }
+  const unusedPurchases = await getUnusedPurchasesFromStrapi();
+  const sendedToFbPurchases = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
   res.json(result);
 })
 
