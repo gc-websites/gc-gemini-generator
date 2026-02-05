@@ -12,7 +12,7 @@ import { createTelegramBot } from "./tgBot.js";
 import requestIp from 'request-ip';
 import { ParseAmazonOrders } from './playwright/getEarningsData.js';
 import { applyCommissionsToPurchases, attachOrdersToLeads, createPurchasesToStrapi, filterNewPurchases, getAmznComissionsFromStrapi, getLeadsFromStrapi, getPurchasesFromStrapiLast24h, getUnusedPurchasesFromStrapi, postPurchasesToStrapi, sendPurchasesToFacebookAndMarkUsed} from './functionsForTracking.js';
-
+import {generateCommonTitle,generateProductsArray,postMultiproductToStrapi} from './functionsForMultiproducts.js';
 const server = express();
 const PORT = process.env.PORT || 4000;
 dotenv.config();
@@ -56,16 +56,16 @@ server.post("/send", async (req, res) => {
   }
 });
 
-// bot.on("message", (msg) => {
-//   const chat = msg.chat;
+bot.on("message", (msg) => {
+  const chat = msg.chat;
 
-//   console.log({
-//     chatId: chat.id,
-//     type: chat.type,        // private | group | supergroup | channel
-//     title: chat.title,      // название группы / канала
-//     username: chat.username // если есть
-//   });
-// });
+  console.log({
+    chatId: chat.id,
+    type: chat.type,        // private | group | supergroup | channel
+    title: chat.title,      // название группы / канала
+    username: chat.username // если есть
+  });
+});
 
 
 let isRunning = false;
@@ -186,6 +186,33 @@ server.get('/get-product/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 })
+
+server.get('/get-multiproduct/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const strapiRes = await fetch(
+      `${STRAPI_API_URL}/api/multiproducts/${id}?populate[product][populate]=image`,
+      {
+        headers: {
+          Authorization: STRAPI_TOKEN,
+        },
+      }
+    );
+
+    if (!strapiRes.ok) {
+      throw new Error(`Strapi error: ${strapiRes.statusText}`);
+    }
+
+    const multiproduct = await strapiRes.json();
+    res.json(multiproduct);
+
+  } catch (err) {
+    console.error('❌ Error fetching multiproduct:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 server.post('/get-product/ads/:id', async (req, res) => {
   const {id} = req.params;
@@ -322,6 +349,41 @@ ${message}
     );
   }
 });
+
+
+
+server.post('/generate-multiproducts', async (req, res) => {
+  const { country, products } = req.body;
+
+  if (!country || !Array.isArray(products) || products.length < 5 || products.length > 15) {
+    return res.status(400).json({ error: 'Invalid input' });
+  }
+
+  try {
+    const queries = products.map(p => p.query);
+
+    const commonTitle = await generateCommonTitle(queries);
+    const generatedProducts = await generateProductsArray(products);
+
+    const documentId = await postMultiproductToStrapi({
+      title: commonTitle,
+      country,
+      products: generatedProducts
+    });
+
+    res.json({
+      success: true,
+      documentId
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
 
 
 
