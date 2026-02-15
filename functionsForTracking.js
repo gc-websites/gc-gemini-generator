@@ -163,7 +163,7 @@ const createPurchasesToStrapi = (matchedLeads) => {
 
     for (const order of lead.orders) {
 
-      const currentEventTime = Math.floor(Date.now() / 1000); // ✅ новое время
+      const currentEventTime = String(Math.floor(Date.now() / 1000)); // ✅ новое время
 
       purchases.push({
         // 🔹 данные лида
