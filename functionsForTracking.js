@@ -155,14 +155,16 @@ const createPurchasesToStrapi = (matchedLeads) => {
       fbc,
       trackingId: leadTrackingId,
       client_user_agent,
-      event_time,
-      event_source_url,
+      client_ip_address,
       action_source
     } = lead;
 
     if (!Array.isArray(lead.orders)) continue;
 
     for (const order of lead.orders) {
+
+      const currentEventTime = Math.floor(Date.now() / 1000); // ✅ новое время
+
       purchases.push({
         // 🔹 данные лида
         productId,
@@ -171,10 +173,12 @@ const createPurchasesToStrapi = (matchedLeads) => {
         fbc,
         trackingId: leadTrackingId,
         client_user_agent,
+        client_ip_address,
 
         event_name: "Purchase",
-        event_time,
+        event_time: currentEventTime, // ✅ теперь новое время
         event_id: crypto.randomUUID(),
+        order_id: crypto.randomUUID(),
 
         value: order.price * order.orderedCount,
 
@@ -182,14 +186,14 @@ const createPurchasesToStrapi = (matchedLeads) => {
         action_source: action_source || "website",
         isUsed: false,
 
-        // 🔹 данные заказа (ПОЛНОСТЬЮ)
+        // 🔹 данные заказа
         title: order.title,
         itemUrl: order.itemUrl,
         ASIN: order.ASIN,
         category: order.category,
         merchant: order.merchant,
         orderedCount: order.orderedCount,
-        trackingId: order.trackingId, // subtag-xxx-20
+        trackingId: order.trackingId,
         price: order.price
       });
     }
@@ -197,6 +201,8 @@ const createPurchasesToStrapi = (matchedLeads) => {
 
   return purchases;
 };
+
+
 
 const applyCommissionsToPurchases = (purchases, commissions) => {
   if (!Array.isArray(purchases) || !Array.isArray(commissions)) {
@@ -405,13 +411,14 @@ const sendPurchasesToFacebookAndMarkUsed = async (purchases) => {
           user_data: {
             fbc: purchase.fbc,
             fbp: purchase.fbp,
-            client_user_agent: purchase.client_user_agent
+            client_user_agent: purchase.client_user_agent,
+            client_ip_address: purchase.client_ip_address // ✅ добавили IP
           },
 
           custom_data: {
             currency: "USD",
             value: purchase.value,
-            order_id: purchase.trackingId,
+            order_id: purchase.order_id,
             contents: [
               {
                 id: purchase.ASIN,
