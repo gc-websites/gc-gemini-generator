@@ -389,43 +389,102 @@ const getUnusedPurchasesFromStrapi = async () => {
 };
 
 
-const sendPurchasesToFacebookAndMarkUsed = async (purchases) => {
-  const sentPurchases = []; // 👈 сюда собираем результат
+const sendLeadToFacebook = async (lead) => {
+  console.log("➡️ Sending lead to Facebook:", {
+    productId: lead.productId,
+    trackingId: lead.trackingId
+  });
 
-  for (const purchase of purchases) {
-    console.log("➡️ Sending purchase to Facebook:", {
-      id: purchase.id,
-      ASIN: purchase.ASIN,
-      trackingId: purchase.trackingId
+  const fbPayload = {
+    data: [
+      {
+        event_name: "Lead",
+        event_time: Number(lead.event_time),
+        action_source: "website",
+        event_source_url: lead.event_source_url || "https://nice-advice.info",
+        event_id: lead.event_id,
+        user_data: {
+          fbc: lead.fbc,
+          fbp: lead.fbp,
+          client_user_agent: lead.client_user_agent,
+          client_ip_address: lead.client_ip_address
+        },
+        custom_data: {
+          content_ids: [lead.productId],
+          content_type: "product"
+        }
+      }
+    ]
+  };
+
+  try {
+    const fbRes = await fetch(FB_EVENTS_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(fbPayload)
     });
+
+    const fbText = await fbRes.text();
+    if (!fbRes.ok) {
+      console.error("❌ Facebook Lead error:", fbText);
+    } else {
+      console.log("✅ Facebook Lead accepted:", fbText);
+    }
+  } catch (err) {
+    console.error("🔥 Error sending lead to Facebook:", err);
+  }
+};
+
+
+const sendPurchasesToFacebookAndMarkUsed = async (purchases) => {
+  const sentGroups = [];
+
+  // 1️⃣ Grouping by trackingId
+  const groups = purchases.reduce((acc, p) => {
+    const key = p.trackingId || "no-tracking";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(p);
+    return acc;
+  }, {});
+
+  for (const trackingId in groups) {
+    const groupItems = groups[trackingId];
+    // Since all items in a group share the same lead/user data, we use the first one for common fields
+    const first = groupItems[0];
+
+    // Calculate total value and construct contents array
+    const totalValue = groupItems.reduce((sum, p) => sum + (p.value || 0), 0);
+    const contents = groupItems.map(p => ({
+      id: p.ASIN,
+      quantity: p.orderedCount,
+      item_price: p.price
+    }));
+
+    console.log(`➡️ Sending grouped purchase to Facebook: trackingId=${trackingId}, items=${groupItems.length}, totalValue=${totalValue}`);
 
     const fbPayload = {
       data: [
         {
           event_name: "Purchase",
-          event_time: Number(purchase.event_time),
-          action_source: purchase.action_source || "website",
-          event_source_url: purchase.event_source_url,
-          event_id: purchase.event_id,
+          event_time: Number(first.event_time),
+          action_source: first.action_source || "website",
+          event_source_url: first.event_source_url,
+          event_id: crypto.randomUUID(), // New unique ID for the grouped event
 
           user_data: {
-            fbc: purchase.fbc,
-            fbp: purchase.fbp,
-            client_user_agent: purchase.client_user_agent,
-            client_ip_address: purchase.client_ip_address // ✅ добавили IP
+            fbc: first.fbc,
+            fbp: first.fbp,
+            client_user_agent: first.client_user_agent,
+            client_ip_address: first.client_ip_address
           },
 
           custom_data: {
             currency: "USD",
-            value: purchase.value,
-            order_id: purchase.order_id,
-            contents: [
-              {
-                id: purchase.ASIN,
-                quantity: purchase.orderedCount,
-                item_price: purchase.price
-              }
-            ]
+            value: Number(totalValue.toFixed(2)),
+            order_id: first.order_id, // Use the first order's ID as reference
+            contents: contents
           }
         }
       ]
@@ -444,71 +503,60 @@ const sendPurchasesToFacebookAndMarkUsed = async (purchases) => {
       const fbText = await fbRes.text();
 
       if (!fbRes.ok) {
-        console.error("❌ Facebook error:", fbText);
-        continue; // ⛔ не добавляем в результат
+        console.error(`❌ Facebook error for group ${trackingId}:`, fbText);
+        continue;
       }
 
-      console.log("✅ Facebook accepted:", fbText);
+      console.log(`✅ Facebook accepted group ${trackingId}:`, fbText);
 
-      // 🟢 2. Обновляем purchase → isUsed = true
-      const updateRes = await fetch(
-        `${STRAPI_API_URL}/api/purchases/${purchase.documentId}`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: STRAPI_TOKEN,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            data: { isUsed: true }
-          })
-        }
-      );
-
-      if (!updateRes.ok) {
-        const text = await updateRes.text();
-        console.error(
-          `❌ Failed to update purchase ${purchase.id}:`,
-          text
+      const sentItems = [];
+      // 🟢 2. Обновляем все покупки в группе → isUsed = true
+      for (const purchase of groupItems) {
+        const updateRes = await fetch(
+          `${STRAPI_API_URL}/api/purchases/${purchase.documentId}`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: STRAPI_TOKEN,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              data: { isUsed: true }
+            })
+          }
         );
-        continue; // ⛔ Facebook ок, но Strapi нет → не считаем успешным
+
+        if (!updateRes.ok) {
+          const text = await updateRes.text();
+          console.error(`❌ Failed to update purchase ${purchase.id}:`, text);
+        } else {
+          console.log(`🟢 Purchase ${purchase.id} marked as isUsed = true`);
+          sentItems.push({
+            id: purchase.id,
+            asin: purchase.ASIN,
+            trackingId: purchase.trackingId,
+            value: purchase.value,
+            title: purchase.title,
+            commission: purchase.commission,
+            orderedCount: purchase.orderedCount,
+            price: purchase.price,
+            category: purchase.category,
+          });
+        }
       }
 
-      console.log(
-        `🟢 Purchase ${purchase.id} marked as isUsed = true`
-      );
-
-      // ✅ 3. Добавляем в массив успешных
-      sentPurchases.push({
-        id: purchase.id,
-        asin: purchase.ASIN,
-        trackingId: purchase.trackingId,
-        value: purchase.value,
-        title: purchase.title,
-        commission: purchase.commission,
-        orderedCount: purchase.orderedCount,
-        price: purchase.price,
-        category: purchase.category,
-      });
-
+      if (sentItems.length > 0) {
+        sentGroups.push({
+          trackingId,
+          items: sentItems
+        });
+      }
     } catch (err) {
-      console.error(
-        `🔥 Error processing purchase ${purchase.id}:`,
-        err
-      );
+      console.error(`🔥 Error processing group ${trackingId}:`, err);
     }
   }
 
-  return sentPurchases; // 👈 ВАЖНО
+  return sentGroups;
 };
 
-
-
-
-
-
-
-
-
-
-export {getLeadsFromStrapi, attachOrdersToLeads, createPurchasesToStrapi, getAmznComissionsFromStrapi, applyCommissionsToPurchases, postPurchasesToStrapi, getPurchasesFromStrapiLast24h, filterNewPurchases, getUnusedPurchasesFromStrapi, sendPurchasesToFacebookAndMarkUsed};
+export { getLeadsFromStrapi, attachOrdersToLeads, createPurchasesToStrapi, getAmznComissionsFromStrapi, applyCommissionsToPurchases, postPurchasesToStrapi, getPurchasesFromStrapiLast24h, filterNewPurchases, getUnusedPurchasesFromStrapi, sendPurchasesToFacebookAndMarkUsed, sendLeadToFacebook };

@@ -3,16 +3,16 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import crypto from "crypto";
 import cron from 'node-cron';
-import {generateAndPost, postUserEmail} from './functions.js';
+import { generateAndPost, postUserEmail } from './functions.js';
 import { generateImg, generateProduct, generateRefLink, getTag, getTags, leadPushStrapi, postToStrapi, resetOldTags, updateTagFbclid, updateTagStatus } from './functionsForProducts.js';
-import { generateAndPostCholesterin} from './functionsCholesterin.js';
+import { generateAndPostCholesterin } from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
 import { tagCreator } from './tagCreator.js';
 import { createTelegramBot } from "./tgBot.js";
 import requestIp from 'request-ip';
 import { ParseAmazonOrders } from './playwright/getEarningsData.js';
-import { applyCommissionsToPurchases, attachOrdersToLeads, createPurchasesToStrapi, filterNewPurchases, getAmznComissionsFromStrapi, getLeadsFromStrapi, getPurchasesFromStrapiLast24h, getUnusedPurchasesFromStrapi, postPurchasesToStrapi, sendPurchasesToFacebookAndMarkUsed} from './functionsForTracking.js';
-import {generateCommonTitle,generateProductsArray,postMultiproductToStrapi} from './functionsForMultiproducts.js';
+import { applyCommissionsToPurchases, attachOrdersToLeads, createPurchasesToStrapi, filterNewPurchases, getAmznComissionsFromStrapi, getLeadsFromStrapi, getPurchasesFromStrapiLast24h, getUnusedPurchasesFromStrapi, postPurchasesToStrapi, sendPurchasesToFacebookAndMarkUsed, sendLeadToFacebook } from './functionsForTracking.js';
+import { generateCommonTitle, generateProductsArray, postMultiproductToStrapi } from './functionsForMultiproducts.js';
 const server = express();
 const PORT = process.env.PORT || 4000;
 dotenv.config();
@@ -24,19 +24,19 @@ const TG_TOKEN = process.env.TG_TOKEN;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
 const TG_BOT_ORDERS_ID = process.env.TG_BOT_ORDERS_ID;
 const PIXEL_ID = process.env.PIXEL_ID;
-const PIXEL_TOKEN = process.env.PIXEL_TOKEN ;
+const PIXEL_TOKEN = process.env.PIXEL_TOKEN;
 
 const corsOptions = {
-	origin: [
-		'https://nice-advice.info',
-		'https://www.nice-advice.info',
+  origin: [
+    'https://nice-advice.info',
+    'https://www.nice-advice.info',
     'http://localhost:5173',
     'https://cholesterintipps.de',
     'https://dev.nice-advice.info',
     'https://www.dev.nice-advice.info',
-	],
-	credentials: true,
-	methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 }
 
 server.use(express.json());
@@ -79,40 +79,40 @@ cron.schedule('0 0,12 * * *', async () => {
     console.log('Scheduled job start:', new Date().toISOString());
     const niceAdvicePostId = await generateAndPost();
     await bot.sendMessage(
-    ADMIN_CHAT_ID,
-`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+      ADMIN_CHAT_ID,
+      `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
 ✅NiceAdvice✅
 
 Title:  ${niceAdvicePostId.data.title}
 
 https://nice-advice.info/post/${niceAdvicePostId.data.documentId}`,
-    {
-      disable_web_page_preview: true
-    });
+      {
+        disable_web_page_preview: true
+      });
     const cholesterinPostId = await generateAndPostCholesterin();
     await bot.sendMessage(
-    ADMIN_CHAT_ID,
-`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+      ADMIN_CHAT_ID,
+      `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
 ✅CholesterinTipps✅
 
 Title: ${cholesterinPostId.data.title}
 
 https://cholesterintipps.de/post/${cholesterinPostId.data.documentId}`,
-    {
-      disable_web_page_preview: true
-    });
+      {
+        disable_web_page_preview: true
+      });
     const hairStylesPostId = await generateAndPostHairStyles();
     await bot.sendMessage(
-    ADMIN_CHAT_ID,
-`⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+      ADMIN_CHAT_ID,
+      `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
 ✅HairStylesForSeniors✅
 
 Title: ${hairStylesPostId.data.title}
 
 https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
-    {
-      disable_web_page_preview: true
-    });
+      {
+        disable_web_page_preview: true
+      });
     console.log('Scheduled job end:', new Date().toISOString());
   } catch (err) {
     console.error('Scheduled job error:', err);
@@ -128,7 +128,7 @@ server.post('/generate-post', async (req, res) => {
 });
 
 server.post('/generate-product', async (req, res) => {
-  const {query, link, country} = req.body;
+  const { query, link, country } = req.body;
   //const tag = await getTags(country);
   //console.log('Tag created');
   //const refLink = await generateRefLink(link, tag.name);
@@ -158,11 +158,11 @@ server.post('/generate-product', async (req, res) => {
   // console.log('Tag status updated');
   // const createTagRes = await tagCreator(country);
   // console.log('New tag created');
-  if(postId){
-    res.json({id: postId});
+  if (postId) {
+    res.json({ id: postId });
   }
-  else{
-    res.json({error: 'ERROR'});
+  else {
+    res.json({ error: 'ERROR' });
   }
 })
 
@@ -215,39 +215,39 @@ server.get('/get-multiproduct/:id', async (req, res) => {
 
 
 server.post('/get-product/ads/:id', async (req, res) => {
-  const {id} = req.params;
-  const {fbclid} = req.body;
-   const lead = await createLead(fbclid, id);
-   const result = await strapiLeadPost(lead);
-   if(result){
-    res.json({data: lead.clickId});
-   }
-   else{
+  const { id } = req.params;
+  const { fbclid } = req.body;
+  const lead = await createLead(fbclid, id);
+  const result = await strapiLeadPost(lead);
+  if (result) {
+    res.json({ data: lead.clickId });
+  }
+  else {
     console.log('error')
-   }
+  }
 })
 
 server.post('/fbclid', async (req, res) => {
-  const {fbclid, productId, tag} = req.body;
+  const { fbclid, productId, tag } = req.body;
   const tagFromStrapi = await getTag(tag);
   const tagId = tagFromStrapi.documentId
-  if(tagFromStrapi.fbclid){
+  if (tagFromStrapi.fbclid) {
     res.status(200).send(true);
   }
-  else{
+  else {
     const result = await updateTagFbclid(fbclid, productId, tag, tagId);
     res.json(result);
   }
 })
 
 server.post('/get-trackingId', async (req, res) => {
-  const {country} = req.body;
+  const { country } = req.body;
   const tagFromStrapi = await getTag(country);
   res.json(tagFromStrapi);
 })
 
 server.post('/lead', async (req, res) => {
-  const {productId, fbp, fbc, trackingId, trackingDocId, country} = req.body;
+  const { productId, fbp, fbc, trackingId, trackingDocId, country } = req.body;
   const ip = requestIp.getClientIp(req);
   const userAgent = req.get('user-agent')
   const lead = {
@@ -272,6 +272,10 @@ server.post('/lead', async (req, res) => {
   lead.trackingId = trackingId;
   const strapiRes = await leadPushStrapi(lead);
   const isUpdated = await updateTagStatus(trackingDocId, country);
+
+  // ✅ Отправляем Lead в Facebook CAPI не дожидаясь (или дожидаясь, по желанию)
+  sendLeadToFacebook(lead).catch(err => console.error("FB Lead Error:", err));
+
   res.json(isUpdated);
 })
 
@@ -322,10 +326,13 @@ cron.schedule("0 * * * *", async () => {
   }
 
   const unusedPurchases = await getUnusedPurchasesFromStrapi();
-  const sendedToFbPurchases = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
+  const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
 
-  const message = sendedToFbPurchases
-    .map(p => `
+  for (const group of sendedToFbGroups) {
+    const { trackingId, items } = group;
+
+    const message = items
+      .map(p => `
 • ID: ${p.id}
   ASIN: ${p.asin}
   Tracking: ${p.trackingId}
@@ -336,14 +343,13 @@ cron.schedule("0 * * * *", async () => {
   Value: ${p.value}$
   Title: ${p.title}
 `.trim())
-    .join("\n\n");
+      .join("\n\n");
 
-  if (sendedToFbPurchases.length > 0) {
     await bot.sendMessage(
       TG_BOT_ORDERS_ID,
-`⭐️⭐️⭐️ NEW ORDERS ⭐️⭐️⭐️
+      `⭐️⭐️⭐️ NEW ORDERS ⭐️⭐️⭐️
 
-New orders sent to Facebook:
+New orders sent to Facebook (Group: ${trackingId}):
 ${message}
 `
     );
@@ -388,7 +394,7 @@ server.post('/generate-multiproducts', async (req, res) => {
 
 
 server.get('/test', async (req, res) => {
-  
+
   try {
     for (let i = 0; i < 100; i++) {
       await tagCreator("USA");
