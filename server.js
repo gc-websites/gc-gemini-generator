@@ -329,7 +329,7 @@ cron.schedule("0 * * * *", async () => {
   const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
 
   for (const group of sendedToFbGroups) {
-    const { trackingId, items } = group;
+    const { trackingId, items, totalValue } = group;
 
     const message = items
       .map(p => `
@@ -349,7 +349,9 @@ cron.schedule("0 * * * *", async () => {
       TG_BOT_ORDERS_ID,
       `⭐️⭐️⭐️ NEW ORDERS ⭐️⭐️⭐️
 
-New orders sent to Facebook (Group: ${trackingId}):
+New orders sent to Facebook (Group: ${trackingId})
+💰 Total Group Value: ${totalValue}$
+
 ${message}
 `
     );

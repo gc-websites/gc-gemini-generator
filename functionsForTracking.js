@@ -548,7 +548,8 @@ const sendPurchasesToFacebookAndMarkUsed = async (purchases) => {
       if (sentItems.length > 0) {
         sentGroups.push({
           trackingId,
-          items: sentItems
+          items: sentItems,
+          totalValue: Number(totalValue.toFixed(2))
         });
       }
     } catch (err) {
