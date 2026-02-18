@@ -76,7 +76,7 @@ const generateProduct = async (query) => {
     Do not put any * or similar symbols in your answer. Use emoji approximately as in the example, at least the line should start with an emoji.`;
   const descriptionfield4Prompt = `Create a very short description on the topic ${query}. Example 👉 Grab your puffer jacket today — comfort, style & savings in one!; In your answer, don't write anything superfluous at the beginning or end, just answer my question.
     Do not put any * or similar symbols in your answer. Use emoji approximately as in the example, at least the line should start with an emoji.`;
-  
+
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
   const title = await model.generateContent(titlePrompt);
   const descriptionfield1 = await model.generateContent(descriptionfield1Prompt);
@@ -89,12 +89,13 @@ const generateProduct = async (query) => {
   const cleanDescriptionfield3 = descriptionfield3.response.candidates[0].content.parts[0].text;
   const cleanDescriptionfield4 = descriptionfield4.response.candidates[0].content.parts[0].text;
 
-  return {title: cleanTitle,
-          descriptionfield1: cleanDescriptionfield1,
-          descriptionfield2: cleanDescriptionfield2,
-          descriptionfield3: cleanDescriptionfield3,
-          descriptionfield4: cleanDescriptionfield4,
-        };
+  return {
+    title: cleanTitle,
+    descriptionfield1: cleanDescriptionfield1,
+    descriptionfield2: cleanDescriptionfield2,
+    descriptionfield3: cleanDescriptionfield3,
+    descriptionfield4: cleanDescriptionfield4,
+  };
 }
 
 const generateImg = async (query) => {
@@ -110,62 +111,62 @@ const generateImg = async (query) => {
   });
 
   const generated = response.generatedImages?.[0];
-if (!generated) {
-  console.warn("⚠️ No image object", response);
-  return null;
-}
+  if (!generated) {
+    console.warn("⚠️ No image object", response);
+    return null;
+  }
 
-const imgBytes = generated.image.imageBytes;
-if (!imgBytes) {
-  console.warn("⚠️ No imageBytes found in response", generated);
-  return null;
-}
+  const imgBytes = generated.image.imageBytes;
+  if (!imgBytes) {
+    console.warn("⚠️ No imageBytes found in response", generated);
+    return null;
+  }
 
-const buffer = Buffer.from(imgBytes, "base64");
+  const buffer = Buffer.from(imgBytes, "base64");
 
 
-const formData = new FormData();
-formData.append("files", buffer, {
-  filename: "imagen-thumbnail.png",
-  contentType: "image/png",
-});
+  const formData = new FormData();
+  formData.append("files", buffer, {
+    filename: "imagen-thumbnail.png",
+    contentType: "image/png",
+  });
 
-const uploadRes = await fetch(`${STRAPI_API_URL}/api/upload`, {
-  method: "POST",
-  headers: { Authorization: STRAPI_TOKEN },
-  body: formData,
-});
+  const uploadRes = await fetch(`${STRAPI_API_URL}/api/upload`, {
+    method: "POST",
+    headers: { Authorization: STRAPI_TOKEN },
+    body: formData,
+  });
 
-const result = await uploadRes.json();
-if (Array.isArray(result) && result[0]?.id) {
-  console.log(`✅ Uploaded image to Strapi: id=${result[0].id}`);
-  return result[0].id;
-} else {
-  console.warn("⚠️ No id found for uploaded image", result);
-  return null;
-}
+  const result = await uploadRes.json();
+  if (Array.isArray(result) && result[0]?.id) {
+    console.log(`✅ Uploaded image to Strapi: id=${result[0].id}`);
+    return result[0].id;
+  } else {
+    console.warn("⚠️ No id found for uploaded image", result);
+    return null;
+  }
 }
 
 const postToStrapi = async (product) => {
   try {
-        const strapiRes = await fetch(`${STRAPI_API_URL}/api/products`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: STRAPI_TOKEN,
-          },
-          body: JSON.stringify({ data: product }),
-        })
-        if (!strapiRes.ok) {
-          const err = await strapiRes.text()
-          throw new Error(err)
-        }
-        const result = await strapiRes.json();
-        return result.data.documentId;
-      } catch (err) {
-        console.error('❌ Create-post error:', err)
-        return err.message;
-      }
+    const strapiRes = await fetch(`${STRAPI_API_URL}/api/products`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: STRAPI_TOKEN,
+      },
+      body: JSON.stringify({ data: product }),
+    })
+    if (!strapiRes.ok) {
+      const err = await strapiRes.text()
+      throw new Error(err)
+    }
+    const result = await strapiRes.json();
+    return result.data.documentId;
+  } catch (err) {
+    console.error('❌ Create-post error:', err)
+    return err.message;
+  }
 }
 
 const updateTagStatus = async (tagDocId, country) => {
@@ -178,25 +179,25 @@ const updateTagStatus = async (tagDocId, country) => {
 
   const updateUrl = `${STRAPI_API_URL}/api/${collection}/${tagDocId}`;
   const updateRes = await fetch(updateUrl, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `${STRAPI_TOKEN}`,
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `${STRAPI_TOKEN}`,
+    },
+    body: JSON.stringify({
+      data: {
+        isUsed: true,
       },
-      body: JSON.stringify({
-        data: {
-          isUsed: true,
-        },
-      })
-    });
+    })
+  });
 
-    if (!updateRes.ok) {
-      console.error("❌ Strapi update error:", updateRes.status, await updateRes.text());
-      return null;
-    }
+  if (!updateRes.ok) {
+    console.error("❌ Strapi update error:", updateRes.status, await updateRes.text());
+    return null;
+  }
 
-    const updated = await updateRes.json();
-    return updated;
+  const updated = await updateRes.json();
+  return updated;
 
 }
 
@@ -205,7 +206,7 @@ const getTag = async (country) => {
 
   if (country === 'USA') {
     endpoint = "taguses";
-  } else if (country === 'CA') {
+  } else if (country === 'Canada' || country === 'CA') {
     endpoint = "tagcas";
   } else {
     throw new Error("Unsupported tag format");
@@ -284,24 +285,24 @@ const updateTagFbclid = async (productId, tag, tagId) => {
 
 const leadPushStrapi = async (lead) => {
   try {
-        const strapiRes = await fetch(`${STRAPI_API_URL}/api/leads`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: STRAPI_TOKEN,
-          },
-          body: JSON.stringify({ data: lead }),
-        })
-        if (!strapiRes.ok) {
-          const err = await strapiRes.text()
-          throw new Error(err)
-        }
-        const result = await strapiRes.json();
-        return result.data.documentId;
-      } catch (err) {
-        console.error('❌ Create-post error:', err)
-        return err.message;
-      }
+    const strapiRes = await fetch(`${STRAPI_API_URL}/api/leads`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: STRAPI_TOKEN,
+      },
+      body: JSON.stringify({ data: lead }),
+    })
+    if (!strapiRes.ok) {
+      const err = await strapiRes.text()
+      throw new Error(err)
+    }
+    const result = await strapiRes.json();
+    return result.data.documentId;
+  } catch (err) {
+    console.error('❌ Create-post error:', err)
+    return err.message;
+  }
 }
 
 const resetOldTags = async () => {
@@ -309,13 +310,13 @@ const resetOldTags = async () => {
     Date.now() - 48 * 60 * 60 * 1000
   ).toISOString();
   const url =
-  `${STRAPI_API_URL}/api/taguses` +
-  `?filters[isUsed][$eq]=true` +
-  `&filters[updatedAt][$lt]=${encodeURIComponent(date48hAgo)}`;
+    `${STRAPI_API_URL}/api/taguses` +
+    `?filters[isUsed][$eq]=true` +
+    `&filters[updatedAt][$lt]=${encodeURIComponent(date48hAgo)}`;
   const res = await fetch(url, {
-  headers: {
-    Authorization: STRAPI_TOKEN,
-  },
+    headers: {
+      Authorization: STRAPI_TOKEN,
+    },
   });
 
   const json = await res.json();
@@ -324,4 +325,51 @@ const resetOldTags = async () => {
 
 
 
-export {generateProduct, generateImg, postToStrapi, getTags, generateRefLink, updateTagStatus, getTag, updateTagFbclid, leadPushStrapi, resetOldTags};
+const claimTag = async (proposedTagDocId, country) => {
+  let collection;
+  const normalizedCountry = (country === 'CA' || country === 'Canada') ? 'Canada' : 'USA';
+
+  if (normalizedCountry === 'USA') {
+    collection = "taguses";
+  } else {
+    collection = "tagcas";
+  }
+
+  // 1. Check if proposed tag is still available
+  if (proposedTagDocId) {
+    const checkUrl = `${STRAPI_API_URL}/api/${collection}/${proposedTagDocId}`;
+    try {
+      const res = await fetch(checkUrl, {
+        headers: { Authorization: STRAPI_TOKEN }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const tagData = json?.data;
+        if (tagData && tagData.isUsed === false) {
+          // It's still free! Claim it.
+          await updateTagStatus(proposedTagDocId, normalizedCountry);
+          return {
+            documentId: proposedTagDocId,
+            name: tagData.name
+          };
+        }
+      }
+    } catch (err) {
+      console.warn("⚠️ Error checking proposed tag:", err);
+    }
+  }
+
+  // 2. If no proposed tag or it was already used, get a new one
+  const newTag = await getTag(normalizedCountry);
+  if (newTag) {
+    await updateTagStatus(newTag.documentId, normalizedCountry);
+    return {
+      documentId: newTag.documentId,
+      name: newTag.name
+    };
+  }
+
+  return null;
+};
+
+export { generateProduct, generateImg, postToStrapi, getTags, generateRefLink, updateTagStatus, getTag, updateTagFbclid, leadPushStrapi, resetOldTags, claimTag };
