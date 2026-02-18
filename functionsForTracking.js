@@ -156,7 +156,8 @@ const createPurchasesToStrapi = (matchedLeads) => {
       trackingId: leadTrackingId,
       client_user_agent,
       client_ip_address,
-      action_source
+      action_source,
+      external_id
     } = lead;
 
     if (!Array.isArray(lead.orders)) continue;
@@ -174,6 +175,7 @@ const createPurchasesToStrapi = (matchedLeads) => {
         trackingId: leadTrackingId,
         client_user_agent,
         client_ip_address,
+        external_id,
 
         event_name: "Purchase",
         event_time: currentEventTime, // ✅ теперь новое время
@@ -407,7 +409,8 @@ const sendLeadToFacebook = async (lead) => {
           fbc: lead.fbc,
           fbp: lead.fbp,
           client_user_agent: lead.client_user_agent,
-          client_ip_address: lead.client_ip_address
+          client_ip_address: lead.client_ip_address,
+          external_id: lead.external_id
         },
         custom_data: {
           content_ids: [lead.productId],
@@ -477,7 +480,8 @@ const sendPurchasesToFacebookAndMarkUsed = async (purchases) => {
             fbc: first.fbc,
             fbp: first.fbp,
             client_user_agent: first.client_user_agent,
-            client_ip_address: first.client_ip_address
+            client_ip_address: first.client_ip_address,
+            external_id: first.external_id
           },
 
           custom_data: {

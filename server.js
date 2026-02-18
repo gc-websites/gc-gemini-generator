@@ -253,7 +253,7 @@ server.post('/get-trackingId', async (req, res) => {
 })
 
 server.post('/lead', async (req, res) => {
-  const { productId, fbp, fbc, trackingId, trackingDocId, country } = req.body;
+  const { productId, fbp, fbc, trackingId, trackingDocId, country, external_id } = req.body;
   const ip = requestIp.getClientIp(req);
   const userAgent = req.get('user-agent');
 
@@ -280,7 +280,8 @@ server.post('/lead', async (req, res) => {
       event_time: `${Math.floor(Date.now() / 1000)}`,
       event_id: crypto.randomUUID(),
       event_source_url: 'https://nice-advice.info',
-      action_source: 'website'
+      action_source: 'website',
+      external_id: external_id || claimedTag.name // Store external_id in lead
     };
 
     // Сохраняем лид и отправляем в FB в фоне (без await), чтобы не задерживать юзера
