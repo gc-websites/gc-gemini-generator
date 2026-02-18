@@ -8,7 +8,7 @@ const STRAPI_API_URL = process.env.STRAPI_API_URL;
 const FB_ACCESS_TOKEN = process.env.FB_ACCESS_TOKEN;
 const FB_PIXEL_ID = process.env.FB_PIXEL_ID;
 const FB_EVENTS_URL =
-  `https://graph.facebook.com/v18.0/${FB_PIXEL_ID}/events?access_token=${FB_ACCESS_TOKEN}`;
+  `https://graph.facebook.com/v24.0/${FB_PIXEL_ID}/events?access_token=${FB_ACCESS_TOKEN}`;
 
 const getLeadsFromStrapi = async () => {
   try {
