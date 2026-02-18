@@ -283,12 +283,11 @@ server.post('/lead', async (req, res) => {
       action_source: 'website'
     };
 
-    const strapiRes = await leadPushStrapi(lead);
-
-    // Отправляем Lead в Facebook CAPI не дожидаясь
+    // Сохраняем лид и отправляем в FB в фоне (без await), чтобы не задерживать юзера
+    leadPushStrapi(lead).catch(err => console.error("❌ Lead saving error:", err));
     sendLeadToFacebook(lead).catch(err => console.error("FB Lead Error:", err));
 
-    // Возвращаем финальный тег фронтенду
+    // Возвращаем финальный тег фронтенду НЕМЕДЛЕННО
     res.json({
       success: true,
       trackingId: claimedTag.name,
