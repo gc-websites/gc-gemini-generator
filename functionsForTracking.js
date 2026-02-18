@@ -501,6 +501,12 @@ const sendPurchasesToFacebookAndMarkUsed = async (purchases) => {
       });
 
       const fbText = await fbRes.text();
+      let fbResponseData = {};
+      try {
+        fbResponseData = JSON.parse(fbText);
+      } catch (e) {
+        console.warn("⚠️ Failed to parse FB response JSON:", fbText);
+      }
 
       if (!fbRes.ok) {
         console.error(`❌ Facebook error for group ${trackingId}:`, fbText);
@@ -509,8 +515,10 @@ const sendPurchasesToFacebookAndMarkUsed = async (purchases) => {
 
       console.log(`✅ Facebook accepted group ${trackingId}:`, fbText);
 
+      const { fbtrace_id, messages, events_received } = fbResponseData;
+
       const sentItems = [];
-      // 🟢 2. Обновляем все покупки в группе → isUsed = true
+      // 🟢 2. Обновляем все покупки в группе → isUsed = true + логи FB
       for (const purchase of groupItems) {
         const updateRes = await fetch(
           `${STRAPI_API_URL}/api/purchases/${purchase.documentId}`,
@@ -521,7 +529,12 @@ const sendPurchasesToFacebookAndMarkUsed = async (purchases) => {
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
-              data: { isUsed: true }
+              data: {
+                isUsed: true,
+                fbtrace_id: fbtrace_id || null,
+                events_received: events_received !== undefined ? String(events_received) : null,
+                messages: messages ? JSON.stringify(messages) : null
+              }
             })
           }
         );
