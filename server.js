@@ -254,7 +254,7 @@ server.post('/lead', async (req, res) => {
     const now = Date.now();
     const cached = recentLeads.get(cacheKey);
 
-    if (cached && (now - cached.time) < 10000) {
+    if (cached && (now - cached.time) < 3600000) {
       console.log(`♻️ Duplicate lead intercepted for ${cacheKey}`);
       return res.json({
         success: true,
@@ -304,7 +304,7 @@ server.post('/lead', async (req, res) => {
       if (recentLeads.get(cacheKey)?.time === now) {
         recentLeads.delete(cacheKey);
       }
-    }, 15000);
+    }, 3660000);
 
     // Возвращаем финальный тег фронтенду НЕМЕДЛЕННО
     res.json({
