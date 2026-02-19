@@ -30,6 +30,7 @@ const PIXEL_ID = process.env.PIXEL_ID;
 const PIXEL_TOKEN = process.env.PIXEL_TOKEN;
 
 const tagMutex = new Mutex();
+const recentLeads = new Map(); // For deduplication
 
 
 const corsOptions = {
@@ -220,18 +221,6 @@ server.get('/get-multiproduct/:id', async (req, res) => {
 });
 
 
-server.post('/get-product/ads/:id', async (req, res) => {
-  const { id } = req.params;
-  const { fbclid } = req.body;
-  const lead = await createLead(fbclid, id);
-  const result = await strapiLeadPost(lead);
-  if (result) {
-    res.json({ data: lead.clickId });
-  }
-  else {
-    console.log('error')
-  }
-})
 
 server.post('/fbclid', async (req, res) => {
   const { fbclid, productId, tag } = req.body;
@@ -260,6 +249,21 @@ server.post('/lead', async (req, res) => {
   // Используем Mutex для атомарного присвоения тега
   const release = await tagMutex.acquire();
   try {
+    // Дедупликация: если тот же fbp стучится за тот же продукт в течение 10 сек
+    const cacheKey = `${fbp || ip}_${productId}`;
+    const now = Date.now();
+    const cached = recentLeads.get(cacheKey);
+
+    if (cached && (now - cached.time) < 10000) {
+      console.log(`♻️ Duplicate lead intercepted for ${cacheKey}`);
+      return res.json({
+        success: true,
+        trackingId: cached.trackingId,
+        trackingDocId: cached.trackingDocId,
+        cached: true
+      });
+    }
+
     // Проверяем и бронируем тег (если старый занят - берем новый)
     const claimedTag = await claimTag(trackingDocId, country);
 
@@ -287,6 +291,20 @@ server.post('/lead', async (req, res) => {
     // Сохраняем лид и отправляем в FB в фоне (без await), чтобы не задерживать юзера
     leadPushStrapi(lead).catch(err => console.error("❌ Lead saving error:", err));
     sendLeadToFacebook(lead).catch(err => console.error("FB Lead Error:", err));
+
+    // Обновляем кеш дедупликации
+    recentLeads.set(cacheKey, {
+      time: now,
+      trackingId: claimedTag.name,
+      trackingDocId: claimedTag.documentId
+    });
+
+    // Очистка кеша (опционально, чтобы не рос бесконечно)
+    setTimeout(() => {
+      if (recentLeads.get(cacheKey)?.time === now) {
+        recentLeads.delete(cacheKey);
+      }
+    }, 15000);
 
     // Возвращаем финальный тег фронтенду НЕМЕДЛЕННО
     res.json({
