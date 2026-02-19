@@ -316,7 +316,7 @@ cron.schedule('0 * * * *', async () => {
           Authorization: STRAPI_TOKEN,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ hours: 48 }),
+        body: JSON.stringify({ hours: 26 }),
       }
     );
 

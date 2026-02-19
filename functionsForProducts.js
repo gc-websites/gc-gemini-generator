@@ -307,7 +307,7 @@ const leadPushStrapi = async (lead) => {
 
 const resetOldTags = async () => {
   const date48hAgo = new Date(
-    Date.now() - 48 * 60 * 60 * 1000
+    Date.now() - 26 * 60 * 60 * 1000
   ).toISOString();
   const url =
     `${STRAPI_API_URL}/api/taguses` +
