@@ -11,7 +11,7 @@ import { generateImg, generateProduct, generateRefLink, getTag, getTags, leadPus
 import { generateAndPostCholesterin } from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
 import { tagCreator } from './tagCreator.js';
-// import { createTelegramBot } from "./tgBot.js";
+import { createTelegramBot } from "./tgBot.js";
 import requestIp from 'request-ip';
 import { ParseAmazonOrders } from './playwright/getEarningsData.js';
 import { applyCommissionsToPurchases, attachOrdersToLeads, createPurchasesToStrapi, filterNewPurchases, getAmznComissionsFromStrapi, getLeadsFromStrapi, getPurchasesFromStrapiLast24h, getUnusedPurchasesFromStrapi, postPurchasesToStrapi, sendPurchasesToFacebookAndMarkUsed, sendLeadToFacebook } from './functionsForTracking.js';
@@ -51,109 +51,109 @@ server.use(express.json());
 server.use(cors(corsOptions));
 server.set('trust proxy', true);
 
-// const bot = createTelegramBot(TG_TOKEN);
+const bot = createTelegramBot(TG_TOKEN);
 
-// server.post("/send", async (req, res) => {
-//   const { chatId, message } = req.body;
+server.post("/send", async (req, res) => {
+  const { chatId, message } = req.body;
 
-//   try {
-//     await bot.sendMessage(chatId, message);
-//     res.json({ ok: true });
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// });
+  try {
+    await bot.sendMessage(chatId, message);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
-// bot.on("message", (msg) => {
-//   const chat = msg.chat;
+bot.on("message", (msg) => {
+  const chat = msg.chat;
 
-//   console.log({
-//     chatId: chat.id,
-//     type: chat.type,        // private | group | supergroup | channel
-//     title: chat.title,      // название группы / канала
-//     username: chat.username // если есть
-//   });
-// });
+  console.log({
+    chatId: chat.id,
+    type: chat.type,        // private | group | supergroup | channel
+    title: chat.title,      // название группы / канала
+    username: chat.username // если есть
+  });
+});
 
 
-// let isRunning = false;
-// cron.schedule('0 0,12 * * *', async () => {
-//   if (isRunning) {
-//     console.log('generateAndPost already running — skipping this run.');
-//     return;
-//   }
-//   isRunning = true;
-//   try {
-//     console.log('Scheduled job start:', new Date().toISOString());
-//     const niceAdvicePostId = await generateAndPost();
-//     await bot.sendMessage(
-//       ADMIN_CHAT_ID,
-//       `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-// ✅NiceAdvice✅
+let isRunning = false;
+cron.schedule('0 0,12 * * *', async () => {
+  if (isRunning) {
+    console.log('generateAndPost already running — skipping this run.');
+    return;
+  }
+  isRunning = true;
+  try {
+    console.log('Scheduled job start:', new Date().toISOString());
+    const niceAdvicePostId = await generateAndPost();
+    await bot.sendMessage(
+      ADMIN_CHAT_ID,
+      `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅NiceAdvice✅
 
-// Title:  ${niceAdvicePostId.data.title}
+Title:  ${niceAdvicePostId.data.title}
 
-// https://nice-advice.info/post/${niceAdvicePostId.data.documentId}`,
-//       {
-//         disable_web_page_preview: true
-//       });
-//     const cholesterinPostId = await generateAndPostCholesterin();
-//     await bot.sendMessage(
-//       ADMIN_CHAT_ID,
-//       `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-// ✅CholesterinTipps✅
+https://nice-advice.info/post/${niceAdvicePostId.data.documentId}`,
+      {
+        disable_web_page_preview: true
+      });
+    const cholesterinPostId = await generateAndPostCholesterin();
+    await bot.sendMessage(
+      ADMIN_CHAT_ID,
+      `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅CholesterinTipps✅
 
-// Title: ${cholesterinPostId.data.title}
+Title: ${cholesterinPostId.data.title}
 
-// https://cholesterintipps.de/post/${cholesterinPostId.data.documentId}`,
-//       {
-//         disable_web_page_preview: true
-//       });
-//     const hairStylesPostId = await generateAndPostHairStyles();
-//     await bot.sendMessage(
-//       ADMIN_CHAT_ID,
-//       `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-// ✅HairStylesForSeniors✅
+https://cholesterintipps.de/post/${cholesterinPostId.data.documentId}`,
+      {
+        disable_web_page_preview: true
+      });
+    const hairStylesPostId = await generateAndPostHairStyles();
+    await bot.sendMessage(
+      ADMIN_CHAT_ID,
+      `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅HairStylesForSeniors✅
 
-// Title: ${hairStylesPostId.data.title}
+Title: ${hairStylesPostId.data.title}
 
-// https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
-//       {
-//         disable_web_page_preview: true
-//       });
-//     console.log('Scheduled job end:', new Date().toISOString());
-//   } catch (err) {
-//     console.error('Scheduled job error:', err);
-//   } finally {
-//     isRunning = false;
-//   }
-// }, {
-//   timezone: 'Europe/Kiev'
-// });
+https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
+      {
+        disable_web_page_preview: true
+      });
+    console.log('Scheduled job end:', new Date().toISOString());
+  } catch (err) {
+    console.error('Scheduled job error:', err);
+  } finally {
+    isRunning = false;
+  }
+}, {
+  timezone: 'Europe/Kiev'
+});
 
-// cron.schedule('30 9 * * *', async () => {
-//   console.log('Running daily site availability check...');
-//   try {
-//     const report = await checkSitesAvailability();
-//     await bot.sendMessage(ADMIN_CHAT_ID, report);
-//     console.log('Site check report sent to Telegram.');
-//   } catch (error) {
-//     console.error('Error during site availability check:', error);
-//   }
-// }, {
-//   timezone: 'Europe/Kiev'
-// });
+cron.schedule('30 9 * * *', async () => {
+  console.log('Running daily site availability check...');
+  try {
+    const report = await checkSitesAvailability();
+    await bot.sendMessage(ADMIN_CHAT_ID, report);
+    console.log('Site check report sent to Telegram.');
+  } catch (error) {
+    console.error('Error during site availability check:', error);
+  }
+}, {
+  timezone: 'Europe/Kiev'
+});
 
-// server.get('/test-check-sites', async (req, res) => {
-//   try {
-//     const report = await checkSitesAvailability();
-//     await bot.sendMessage(ADMIN_CHAT_ID, report);
-//     res.json({ success: true, report });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({ error: error.message });
-//   }
-// });
+server.get('/test-check-sites', async (req, res) => {
+  try {
+    const report = await checkSitesAvailability();
+    await bot.sendMessage(ADMIN_CHAT_ID, report);
+    res.json({ success: true, report });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 server.post('/generate-post', async (req, res) => {
   generateAndPost();
@@ -397,83 +397,83 @@ server.post('/lead', async (req, res) => {
 });
 
 
-// cron.schedule('0 * * * *', async () => {
-//   try {
-//     console.log('[CRON][TAGS] start resetOldUsedTags');
+cron.schedule('0 * * * *', async () => {
+  try {
+    console.log('[CRON][TAGS] start resetOldUsedTags');
 
-//     const res = await fetch(
-//       `${STRAPI_API_URL}/api/tagus/reset-old-used`,
-//       {
-//         method: 'POST',
-//         headers: {
-//           Authorization: STRAPI_TOKEN,
-//           'Content-Type': 'application/json',
-//         },
-//         body: JSON.stringify({ hours: 26 }),
-//       }
-//     );
+    const res = await fetch(
+      `${STRAPI_API_URL}/api/tagus/reset-old-used`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: STRAPI_TOKEN,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ hours: 26 }),
+      }
+    );
 
-//     if (!res.ok) {
-//       const text = await res.text();
-//       throw new Error(`Strapi error ${res.status}: ${text}`);
-//     }
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Strapi error ${res.status}: ${text}`);
+    }
 
-//     const data = await res.json();
-//     console.log(
-//       '[CRON][TAGS] done, threshold:',
-//       data.thresholdDate
-//     );
-//   } catch (err) {
-//     console.error('[CRON][TAGS] error:', err.message);
-//   }
-// });
+    const data = await res.json();
+    console.log(
+      '[CRON][TAGS] done, threshold:',
+      data.thresholdDate
+    );
+  } catch (err) {
+    console.error('[CRON][TAGS] error:', err.message);
+  }
+});
 
-// cron.schedule("0 * * * *", async () => {
-//   const ordersFromAmazon = await ParseAmazonOrders();
-//   const leadsFromStrapi = await getLeadsFromStrapi();
-//   const matchedLeads = await attachOrdersToLeads(ordersFromAmazon, leadsFromStrapi);
-//   const createdPurchasesForStrapi = await createPurchasesToStrapi(matchedLeads);
-//   const comissions = await getAmznComissionsFromStrapi();
-//   const purchasesToStrapi = await applyCommissionsToPurchases(createdPurchasesForStrapi, comissions);
-//   const purchasesLast24h = await getPurchasesFromStrapiLast24h();
-//   const newPurchases = await filterNewPurchases(purchasesToStrapi, purchasesLast24h);
+cron.schedule("0 * * * *", async () => {
+  const ordersFromAmazon = await ParseAmazonOrders();
+  const leadsFromStrapi = await getLeadsFromStrapi();
+  const matchedLeads = await attachOrdersToLeads(ordersFromAmazon, leadsFromStrapi);
+  const createdPurchasesForStrapi = await createPurchasesToStrapi(matchedLeads);
+  const comissions = await getAmznComissionsFromStrapi();
+  const purchasesToStrapi = await applyCommissionsToPurchases(createdPurchasesForStrapi, comissions);
+  const purchasesLast24h = await getPurchasesFromStrapiLast24h();
+  const newPurchases = await filterNewPurchases(purchasesToStrapi, purchasesLast24h);
 
-//   if (newPurchases.length > 0) {
-//     await postPurchasesToStrapi(newPurchases);
-//   }
+  if (newPurchases.length > 0) {
+    await postPurchasesToStrapi(newPurchases);
+  }
 
-//   const unusedPurchases = await getUnusedPurchasesFromStrapi();
-//   const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
+  const unusedPurchases = await getUnusedPurchasesFromStrapi();
+  const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
 
-//   for (const group of sendedToFbGroups) {
-//     const { trackingId, items, totalValue } = group;
+  for (const group of sendedToFbGroups) {
+    const { trackingId, items, totalValue } = group;
 
-//     const message = items
-//       .map(p => `
-// • ID: ${p.id}
-//   ASIN: ${p.asin}
-//   Tracking: ${p.trackingId}
-//   Price: ${p.price}$
-//   Commission: ${p.commission}%
-//   Ordered Count: ${p.orderedCount}
-//   Category: ${p.category}
-//   Value: ${p.value}$
-//   Title: ${p.title}
-// `.trim())
-//       .join("\n\n");
+    const message = items
+      .map(p => `
+• ID: ${p.id}
+  ASIN: ${p.asin}
+  Tracking: ${p.trackingId}
+  Price: ${p.price}$
+  Commission: ${p.commission}%
+  Ordered Count: ${p.orderedCount}
+  Category: ${p.category}
+  Value: ${p.value}$
+  Title: ${p.title}
+`.trim())
+      .join("\n\n");
 
-//     await bot.sendMessage(
-//       TG_BOT_ORDERS_ID,
-//       `⭐️⭐️⭐️ NEW ORDERS ⭐️⭐️⭐️
+    await bot.sendMessage(
+      TG_BOT_ORDERS_ID,
+      `⭐️⭐️⭐️ NEW ORDERS ⭐️⭐️⭐️
 
-// New orders sent to Facebook (Group: ${trackingId})
-// 💰 Total Group Value: ${totalValue}$
+New orders sent to Facebook (Group: ${trackingId})
+💰 Total Group Value: ${totalValue}$
 
-// ${message}
-// `
-//     );
-//   }
-// });
+${message}
+`
+    );
+  }
+});
 
 
 
