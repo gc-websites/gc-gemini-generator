@@ -11,11 +11,12 @@ import { generateImg, generateProduct, generateRefLink, getTag, getTags, leadPus
 import { generateAndPostCholesterin } from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
 import { tagCreator } from './tagCreator.js';
-import { createTelegramBot } from "./tgBot.js";
+// import { createTelegramBot } from "./tgBot.js";
 import requestIp from 'request-ip';
 import { ParseAmazonOrders } from './playwright/getEarningsData.js';
 import { applyCommissionsToPurchases, attachOrdersToLeads, createPurchasesToStrapi, filterNewPurchases, getAmznComissionsFromStrapi, getLeadsFromStrapi, getPurchasesFromStrapiLast24h, getUnusedPurchasesFromStrapi, postPurchasesToStrapi, sendPurchasesToFacebookAndMarkUsed, sendLeadToFacebook } from './functionsForTracking.js';
 import { generateCommonTitle, generateProductsArray, postMultiproductToStrapi } from './functionsForMultiproducts.js';
+import { checkSitesAvailability } from './siteChecker.js';
 const server = express();
 const PORT = process.env.PORT || 4000;
 dotenv.config();
@@ -50,85 +51,109 @@ server.use(express.json());
 server.use(cors(corsOptions));
 server.set('trust proxy', true);
 
-const bot = createTelegramBot(TG_TOKEN);
+// const bot = createTelegramBot(TG_TOKEN);
 
-server.post("/send", async (req, res) => {
-  const { chatId, message } = req.body;
+// server.post("/send", async (req, res) => {
+//   const { chatId, message } = req.body;
 
-  try {
-    await bot.sendMessage(chatId, message);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+//   try {
+//     await bot.sendMessage(chatId, message);
+//     res.json({ ok: true });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
-bot.on("message", (msg) => {
-  const chat = msg.chat;
+// bot.on("message", (msg) => {
+//   const chat = msg.chat;
 
-  console.log({
-    chatId: chat.id,
-    type: chat.type,        // private | group | supergroup | channel
-    title: chat.title,      // название группы / канала
-    username: chat.username // если есть
-  });
-});
+//   console.log({
+//     chatId: chat.id,
+//     type: chat.type,        // private | group | supergroup | channel
+//     title: chat.title,      // название группы / канала
+//     username: chat.username // если есть
+//   });
+// });
 
 
-let isRunning = false;
-cron.schedule('0 0,12 * * *', async () => {
-  if (isRunning) {
-    console.log('generateAndPost already running — skipping this run.');
-    return;
-  }
-  isRunning = true;
-  try {
-    console.log('Scheduled job start:', new Date().toISOString());
-    const niceAdvicePostId = await generateAndPost();
-    await bot.sendMessage(
-      ADMIN_CHAT_ID,
-      `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-✅NiceAdvice✅
+// let isRunning = false;
+// cron.schedule('0 0,12 * * *', async () => {
+//   if (isRunning) {
+//     console.log('generateAndPost already running — skipping this run.');
+//     return;
+//   }
+//   isRunning = true;
+//   try {
+//     console.log('Scheduled job start:', new Date().toISOString());
+//     const niceAdvicePostId = await generateAndPost();
+//     await bot.sendMessage(
+//       ADMIN_CHAT_ID,
+//       `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+// ✅NiceAdvice✅
 
-Title:  ${niceAdvicePostId.data.title}
+// Title:  ${niceAdvicePostId.data.title}
 
-https://nice-advice.info/post/${niceAdvicePostId.data.documentId}`,
-      {
-        disable_web_page_preview: true
-      });
-    const cholesterinPostId = await generateAndPostCholesterin();
-    await bot.sendMessage(
-      ADMIN_CHAT_ID,
-      `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-✅CholesterinTipps✅
+// https://nice-advice.info/post/${niceAdvicePostId.data.documentId}`,
+//       {
+//         disable_web_page_preview: true
+//       });
+//     const cholesterinPostId = await generateAndPostCholesterin();
+//     await bot.sendMessage(
+//       ADMIN_CHAT_ID,
+//       `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+// ✅CholesterinTipps✅
 
-Title: ${cholesterinPostId.data.title}
+// Title: ${cholesterinPostId.data.title}
 
-https://cholesterintipps.de/post/${cholesterinPostId.data.documentId}`,
-      {
-        disable_web_page_preview: true
-      });
-    const hairStylesPostId = await generateAndPostHairStyles();
-    await bot.sendMessage(
-      ADMIN_CHAT_ID,
-      `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-✅HairStylesForSeniors✅
+// https://cholesterintipps.de/post/${cholesterinPostId.data.documentId}`,
+//       {
+//         disable_web_page_preview: true
+//       });
+//     const hairStylesPostId = await generateAndPostHairStyles();
+//     await bot.sendMessage(
+//       ADMIN_CHAT_ID,
+//       `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+// ✅HairStylesForSeniors✅
 
-Title: ${hairStylesPostId.data.title}
+// Title: ${hairStylesPostId.data.title}
 
-https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
-      {
-        disable_web_page_preview: true
-      });
-    console.log('Scheduled job end:', new Date().toISOString());
-  } catch (err) {
-    console.error('Scheduled job error:', err);
-  } finally {
-    isRunning = false;
-  }
-}, {
-  timezone: 'Europe/Kiev'
-});
+// https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
+//       {
+//         disable_web_page_preview: true
+//       });
+//     console.log('Scheduled job end:', new Date().toISOString());
+//   } catch (err) {
+//     console.error('Scheduled job error:', err);
+//   } finally {
+//     isRunning = false;
+//   }
+// }, {
+//   timezone: 'Europe/Kiev'
+// });
+
+// cron.schedule('30 9 * * *', async () => {
+//   console.log('Running daily site availability check...');
+//   try {
+//     const report = await checkSitesAvailability();
+//     await bot.sendMessage(ADMIN_CHAT_ID, report);
+//     console.log('Site check report sent to Telegram.');
+//   } catch (error) {
+//     console.error('Error during site availability check:', error);
+//   }
+// }, {
+//   timezone: 'Europe/Kiev'
+// });
+
+// server.get('/test-check-sites', async (req, res) => {
+//   try {
+//     const report = await checkSitesAvailability();
+//     await bot.sendMessage(ADMIN_CHAT_ID, report);
+//     res.json({ success: true, report });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ error: error.message });
+//   }
+// });
 
 server.post('/generate-post', async (req, res) => {
   generateAndPost();
@@ -136,10 +161,6 @@ server.post('/generate-post', async (req, res) => {
 
 server.post('/generate-product', async (req, res) => {
   const { query, link, country } = req.body;
-  //const tag = await getTags(country);
-  //console.log('Tag created');
-  //const refLink = await generateRefLink(link, tag.name);
-  // console.log('RefLink Created');
   const product = {
     title: '',
     descriptionfield1: '',
@@ -161,10 +182,6 @@ server.post('/generate-product', async (req, res) => {
   product.image = imgId;
   const postId = await postToStrapi(product);
   console.log('PostedToStrapi');
-  // await updateTagStatus(tag, country);
-  // console.log('Tag status updated');
-  // const createTagRes = await tagCreator(country);
-  // console.log('New tag created');
   if (postId) {
     res.json({ id: postId });
   }
@@ -182,11 +199,20 @@ server.get('/get-product/:id', async (req, res) => {
       },
     });
 
+    if (strapiRes.status === 404) {
+      console.log(`⚠️ Product not found (404) for ID: ${id}`);
+      return res.status(404).json({ error: "Product not found" });
+    }
+
     if (!strapiRes.ok) {
       throw new Error(`Strapi error: ${strapiRes.statusText}`);
     }
 
     const product = await strapiRes.json();
+    if (!product.data || product.data === null) {
+      console.log(`⚠️ Product not found (404) for ID: ${id}`);
+      return res.status(404).json({ error: "Product not found" });
+    }
     res.json(product);
   } catch (err) {
     console.error("❌ Error fetching product:", err);
@@ -203,11 +229,20 @@ server.get('/get-product-v2/:id', async (req, res) => {
       },
     });
 
+    if (strapiRes.status === 404) {
+      console.log(`⚠️ Product V2 not found (404) for ID: ${id}`);
+      return res.status(404).json({ error: "Product V2 not found" });
+    }
+
     if (!strapiRes.ok) {
       throw new Error(`Strapi error: ${strapiRes.statusText} for ID: ${id}`);
     }
 
     const product = await strapiRes.json();
+    if (!product.data || product.data === null) {
+      console.log(`⚠️ Product V2 not found (404) for ID: ${id}`);
+      return res.status(404).json({ error: "Product V2 not found" });
+    }
     res.json(product);
   } catch (err) {
     console.error("❌ Error fetching product-v2:", err);
@@ -228,11 +263,20 @@ server.get('/get-multiproduct/:id', async (req, res) => {
       }
     );
 
+    if (strapiRes.status === 404) {
+      console.log(`⚠️ Multiproduct not found (404) for ID: ${id}`);
+      return res.status(404).json({ error: "Multiproduct not found" });
+    }
+
     if (!strapiRes.ok) {
       throw new Error(`Strapi error: ${strapiRes.statusText}`);
     }
 
     const multiproduct = await strapiRes.json();
+    if (!multiproduct.data || multiproduct.data === null) {
+      console.log(`⚠️ Multiproduct not found (404) for ID: ${id}`);
+      return res.status(404).json({ error: "Multiproduct not found" });
+    }
     res.json(multiproduct);
 
   } catch (err) {
@@ -270,13 +314,20 @@ server.post('/lead', async (req, res) => {
   // Используем Mutex для атомарного присвоения тега
   const release = await tagMutex.acquire();
   try {
-    // Дедупликация: если тот же fbp стучится за тот же продукт в течение 10 сек
-    const cacheKey = `${fbp || ip}_${productId}`;
+    // Дедупликация: проверяем по fbp, fbc и ip отдельно
     const now = Date.now();
-    const cached = recentLeads.get(cacheKey);
+    const cacheKeyIp = `ip_${ip}_${productId}`;
+    const cacheKeyFbp = fbp ? `fbp_${fbp}_${productId}` : null;
+    const cacheKeyFbc = fbc ? `fbc_${fbc}_${productId}` : null;
+
+    const cachedIp = recentLeads.get(cacheKeyIp);
+    const cachedFbp = cacheKeyFbp ? recentLeads.get(cacheKeyFbp) : null;
+    const cachedFbc = cacheKeyFbc ? recentLeads.get(cacheKeyFbc) : null;
+
+    const cached = cachedIp || cachedFbp || cachedFbc;
 
     if (cached && (now - cached.time) < 3600000) {
-      console.log(`♻️ Duplicate lead intercepted for ${cacheKey}`);
+      console.log(`♻️ Duplicate lead intercepted for IP: ${ip}, fbp: ${fbp || 'none'}`);
       return res.json({
         success: true,
         trackingId: cached.trackingId,
@@ -314,17 +365,20 @@ server.post('/lead', async (req, res) => {
     sendLeadToFacebook(lead).catch(err => console.error("FB Lead Error:", err));
 
     // Обновляем кеш дедупликации
-    recentLeads.set(cacheKey, {
+    const cacheData = {
       time: now,
       trackingId: claimedTag.name,
       trackingDocId: claimedTag.documentId
-    });
+    };
+    recentLeads.set(cacheKeyIp, cacheData);
+    if (cacheKeyFbp) recentLeads.set(cacheKeyFbp, cacheData);
+    if (cacheKeyFbc) recentLeads.set(cacheKeyFbc, cacheData);
 
     // Очистка кеша (опционально, чтобы не рос бесконечно)
     setTimeout(() => {
-      if (recentLeads.get(cacheKey)?.time === now) {
-        recentLeads.delete(cacheKey);
-      }
+      if (recentLeads.get(cacheKeyIp)?.time === now) recentLeads.delete(cacheKeyIp);
+      if (cacheKeyFbp && recentLeads.get(cacheKeyFbp)?.time === now) recentLeads.delete(cacheKeyFbp);
+      if (cacheKeyFbc && recentLeads.get(cacheKeyFbc)?.time === now) recentLeads.delete(cacheKeyFbc);
     }, 3660000);
 
     // Возвращаем финальный тег фронтенду НЕМЕДЛЕННО
@@ -343,83 +397,83 @@ server.post('/lead', async (req, res) => {
 });
 
 
-cron.schedule('0 * * * *', async () => {
-  try {
-    console.log('[CRON][TAGS] start resetOldUsedTags');
+// cron.schedule('0 * * * *', async () => {
+//   try {
+//     console.log('[CRON][TAGS] start resetOldUsedTags');
 
-    const res = await fetch(
-      `${STRAPI_API_URL}/api/tagus/reset-old-used`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: STRAPI_TOKEN,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ hours: 26 }),
-      }
-    );
+//     const res = await fetch(
+//       `${STRAPI_API_URL}/api/tagus/reset-old-used`,
+//       {
+//         method: 'POST',
+//         headers: {
+//           Authorization: STRAPI_TOKEN,
+//           'Content-Type': 'application/json',
+//         },
+//         body: JSON.stringify({ hours: 26 }),
+//       }
+//     );
 
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Strapi error ${res.status}: ${text}`);
-    }
+//     if (!res.ok) {
+//       const text = await res.text();
+//       throw new Error(`Strapi error ${res.status}: ${text}`);
+//     }
 
-    const data = await res.json();
-    console.log(
-      '[CRON][TAGS] done, threshold:',
-      data.thresholdDate
-    );
-  } catch (err) {
-    console.error('[CRON][TAGS] error:', err.message);
-  }
-});
+//     const data = await res.json();
+//     console.log(
+//       '[CRON][TAGS] done, threshold:',
+//       data.thresholdDate
+//     );
+//   } catch (err) {
+//     console.error('[CRON][TAGS] error:', err.message);
+//   }
+// });
 
-cron.schedule("0 * * * *", async () => {
-  const ordersFromAmazon = await ParseAmazonOrders();
-  const leadsFromStrapi = await getLeadsFromStrapi();
-  const matchedLeads = await attachOrdersToLeads(ordersFromAmazon, leadsFromStrapi);
-  const createdPurchasesForStrapi = await createPurchasesToStrapi(matchedLeads);
-  const comissions = await getAmznComissionsFromStrapi();
-  const purchasesToStrapi = await applyCommissionsToPurchases(createdPurchasesForStrapi, comissions);
-  const purchasesLast24h = await getPurchasesFromStrapiLast24h();
-  const newPurchases = await filterNewPurchases(purchasesToStrapi, purchasesLast24h);
+// cron.schedule("0 * * * *", async () => {
+//   const ordersFromAmazon = await ParseAmazonOrders();
+//   const leadsFromStrapi = await getLeadsFromStrapi();
+//   const matchedLeads = await attachOrdersToLeads(ordersFromAmazon, leadsFromStrapi);
+//   const createdPurchasesForStrapi = await createPurchasesToStrapi(matchedLeads);
+//   const comissions = await getAmznComissionsFromStrapi();
+//   const purchasesToStrapi = await applyCommissionsToPurchases(createdPurchasesForStrapi, comissions);
+//   const purchasesLast24h = await getPurchasesFromStrapiLast24h();
+//   const newPurchases = await filterNewPurchases(purchasesToStrapi, purchasesLast24h);
 
-  if (newPurchases.length > 0) {
-    await postPurchasesToStrapi(newPurchases);
-  }
+//   if (newPurchases.length > 0) {
+//     await postPurchasesToStrapi(newPurchases);
+//   }
 
-  const unusedPurchases = await getUnusedPurchasesFromStrapi();
-  const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
+//   const unusedPurchases = await getUnusedPurchasesFromStrapi();
+//   const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
 
-  for (const group of sendedToFbGroups) {
-    const { trackingId, items, totalValue } = group;
+//   for (const group of sendedToFbGroups) {
+//     const { trackingId, items, totalValue } = group;
 
-    const message = items
-      .map(p => `
-• ID: ${p.id}
-  ASIN: ${p.asin}
-  Tracking: ${p.trackingId}
-  Price: ${p.price}$
-  Commission: ${p.commission}%
-  Ordered Count: ${p.orderedCount}
-  Category: ${p.category}
-  Value: ${p.value}$
-  Title: ${p.title}
-`.trim())
-      .join("\n\n");
+//     const message = items
+//       .map(p => `
+// • ID: ${p.id}
+//   ASIN: ${p.asin}
+//   Tracking: ${p.trackingId}
+//   Price: ${p.price}$
+//   Commission: ${p.commission}%
+//   Ordered Count: ${p.orderedCount}
+//   Category: ${p.category}
+//   Value: ${p.value}$
+//   Title: ${p.title}
+// `.trim())
+//       .join("\n\n");
 
-    await bot.sendMessage(
-      TG_BOT_ORDERS_ID,
-      `⭐️⭐️⭐️ NEW ORDERS ⭐️⭐️⭐️
+//     await bot.sendMessage(
+//       TG_BOT_ORDERS_ID,
+//       `⭐️⭐️⭐️ NEW ORDERS ⭐️⭐️⭐️
 
-New orders sent to Facebook (Group: ${trackingId})
-💰 Total Group Value: ${totalValue}$
+// New orders sent to Facebook (Group: ${trackingId})
+// 💰 Total Group Value: ${totalValue}$
 
-${message}
-`
-    );
-  }
-});
+// ${message}
+// `
+//     );
+//   }
+// });
 
 
 
