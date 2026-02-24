@@ -300,6 +300,25 @@ server.post('/fbclid', async (req, res) => {
   }
 })
 
+server.post('/email', async (req, res) => {
+  const { email, source } = req.body;
+  if (!email || !source) {
+    return res.status(400).json({ error: 'Missing email or source' });
+  }
+
+  try {
+    const success = await postUserEmail(email, source);
+    if (success === true) {
+      res.json({ success: true });
+    } else {
+      res.status(500).json({ error: success }); // returns the error message
+    }
+  } catch (err) {
+    console.error('Email endpoint error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 server.post('/get-trackingId', async (req, res) => {
   const { country } = req.body;
   const tagFromStrapi = await getTag(country);
