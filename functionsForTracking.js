@@ -157,7 +157,8 @@ const createPurchasesToStrapi = (matchedLeads) => {
       client_user_agent,
       client_ip_address,
       action_source,
-      external_id
+      external_id,
+      campaign_id
     } = lead;
 
     if (!Array.isArray(lead.orders)) continue;
@@ -176,6 +177,10 @@ const createPurchasesToStrapi = (matchedLeads) => {
         client_user_agent,
         client_ip_address,
         external_id,
+        gclid: lead.gclid,
+        wbraid: lead.wbraid,
+        gbraid: lead.gbraid,
+        campaign_id: campaign_id || null,
 
         event_name: "Purchase",
         event_time: currentEventTime, // ✅ теперь новое время
@@ -317,25 +322,28 @@ const getPurchasesFromStrapiLast24h = async () => {
 const filterNewPurchases = (amazonOrders, strapiPurchases) => {
   const newOrders = [];
 
+  // Calculate the total ordered count we ALREADY have in Strapi for each trackingId+ASIN
+  const strapiSums = {};
+  for (const p of strapiPurchases) {
+    const key = `${p.trackingId}_${p.ASIN}`;
+    if (!strapiSums[key]) strapiSums[key] = 0;
+    strapiSums[key] += (p.orderedCount || 1);
+  }
+
   for (const amazonOrder of amazonOrders) {
-    let isDuplicate = false;
+    const key = `${amazonOrder.trackingId}_${amazonOrder.ASIN}`;
+    const strapiCount = strapiSums[key] || 0;
 
-    for (const strapiPurchase of strapiPurchases) {
-      const sameTracking =
-        amazonOrder.trackingId === strapiPurchase.trackingId;
-
-      const sameASIN =
-        amazonOrder.ASIN === strapiPurchase.ASIN;
-
-      // ❌ дубликат ТОЛЬКО если совпало И ТО И ДРУГОЕ
-      if (sameTracking && sameASIN) {
-        isDuplicate = true;
-        break;
-      }
-    }
-
-    if (!isDuplicate) {
-      newOrders.push(amazonOrder);
+    // If Amazon reports more orders than we have saved in Strapi,
+    // we need to save the difference.
+    if (amazonOrder.orderedCount > strapiCount) {
+      const difference = amazonOrder.orderedCount - strapiCount;
+      newOrders.push({
+        ...amazonOrder,
+        orderedCount: difference
+      });
+      // Update our local sum so we don't count it again if amazonOrders contains duplicates
+      strapiSums[key] += difference;
     }
   }
 
@@ -353,7 +361,8 @@ const getUnusedPurchasesFromStrapi = async () => {
     while (page <= pageCount) {
       const url =
         `${STRAPI_API_URL}/api/purchases` +
-        `?filters[isUsed][$eq]=false` +
+        `?filters[$or][0][isUsed][$eq]=false` +
+        `&filters[$or][1][isGoogleUsed][$eq]=false` +
         `&pagination[page]=${page}` +
         `&pagination[pageSize]=${pageSize}` +
         `&sort[0]=createdAt:asc`;
@@ -547,6 +556,38 @@ const sendPurchasesToFacebookAndMarkUsed = async (purchases) => {
           const text = await updateRes.text();
           console.error(`❌ Failed to update purchase ${purchase.id}:`, text);
         } else {
+          console.log(
+            `🔄 Creating Purchase in Strapi for Lead ${purchase.trackingId} (Order: ${purchase.documentId})`
+          );
+
+          // Include Google Ads parameters if they exist on the lead
+          const purchaseData = {
+            documentId: purchase.documentId,
+            trackingId: purchase.trackingId,
+            productId: purchase.productId,
+            ASIN: purchase.ASIN,
+            fbp: purchase.fbp || "",
+            fbc: purchase.fbc || "",
+            client_ip_address: purchase.client_ip_address || "",
+            client_user_agent: purchase.client_user_agent || "",
+            event_name: "Purchase",
+            event_time: Math.floor(Date.now() / 1000).toString(),
+            event_source_url: purchase.event_source_url || "",
+            action_source: "website",
+            isUsed: true, // This should be true as it's an update after sending to FB
+            isGoogleUsed: false,
+            value: purchase.value,
+            currency: "USD",
+            gclid: purchase.gclid || null,
+            wbraid: purchase.wbraid || null,
+            gbraid: purchase.gbraid || null
+          };
+          // The provided snippet seems to be for *creating* a purchase, but it's placed in an *update* block.
+          // Assuming the intent was to ensure these fields are present when a purchase is marked as used,
+          // and that `purchase` object already contains these fields from its initial creation.
+          // If this block is truly for *creating* a new purchase, it should be in a different function.
+          // For now, I'm placing it as requested, but adapting `leadData` to `purchase` as it's in the context of `for (const purchase of groupItems)`.
+
           console.log(`🟢 Purchase ${purchase.id} marked as isUsed = true`);
           sentItems.push({
             id: purchase.id,

@@ -11,10 +11,12 @@ import { generateImg, generateProduct, generateRefLink, getTag, getTags, leadPus
 import { generateAndPostCholesterin } from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
 import { tagCreator } from './tagCreator.js';
-import { createTelegramBot } from "./tgBot.js";
+// import { createTelegramBot } from "./tgBot.js";
 import requestIp from 'request-ip';
+import { LRUCache } from 'lru-cache'; // <-- Added LRUCache import
 import { ParseAmazonOrders } from './playwright/getEarningsData.js';
 import { applyCommissionsToPurchases, attachOrdersToLeads, createPurchasesToStrapi, filterNewPurchases, getAmznComissionsFromStrapi, getLeadsFromStrapi, getPurchasesFromStrapiLast24h, getUnusedPurchasesFromStrapi, postPurchasesToStrapi, sendPurchasesToFacebookAndMarkUsed, sendLeadToFacebook } from './functionsForTracking.js';
+import { sendPurchasesToGoogleAdsAndMarkUsed } from './functionsForGoogleAds.js';
 import { generateCommonTitle, generateProductsArray, postMultiproductToStrapi } from './functionsForMultiproducts.js';
 import { checkSitesAvailability } from './siteChecker.js';
 const server = express();
@@ -31,8 +33,14 @@ const PIXEL_ID = process.env.PIXEL_ID;
 const PIXEL_TOKEN = process.env.PIXEL_TOKEN;
 
 const tagMutex = new Mutex();
-const recentLeads = new Map(); // For deduplication
 
+// LRUCache automatically deletes items older than `ttl` (Time To Live), 
+// so we don't need manual setTimeouts that cause memory leaks.
+// It also caps the max number of items to prevent out-of-memory errors.
+const recentLeads = new LRUCache({
+  max: 10000,          // Maximum 10,000 items in cache
+  ttl: 1000 * 60 * 60, // Items live for 1 hour (3600000 ms)
+});
 
 const corsOptions = {
   origin: [
@@ -51,98 +59,98 @@ server.use(express.json());
 server.use(cors(corsOptions));
 server.set('trust proxy', true);
 
-const bot = createTelegramBot(TG_TOKEN);
+// const bot = createTelegramBot(TG_TOKEN);
 
-server.post("/send", async (req, res) => {
-  const { chatId, message } = req.body;
+// server.post("/send", async (req, res) => {
+//   const { chatId, message } = req.body;
 
-  try {
-    await bot.sendMessage(chatId, message);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+//   try {
+//     await bot.sendMessage(chatId, message);
+//     res.json({ ok: true });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
-bot.on("message", (msg) => {
-  const chat = msg.chat;
+// bot.on("message", (msg) => {
+//   const chat = msg.chat;
 
-  console.log({
-    chatId: chat.id,
-    type: chat.type,        // private | group | supergroup | channel
-    title: chat.title,      // название группы / канала
-    username: chat.username // если есть
-  });
-});
+//   console.log({
+//     chatId: chat.id,
+//     type: chat.type,        // private | group | supergroup | channel
+//     title: chat.title,      // название группы / канала
+//     username: chat.username // если есть
+//   });
+// });
 
 
-let isRunning = false;
-cron.schedule('0 0,12 * * *', async () => {
-  if (isRunning) {
-    console.log('generateAndPost already running — skipping this run.');
-    return;
-  }
-  isRunning = true;
-  try {
-    console.log('Scheduled job start:', new Date().toISOString());
-    const niceAdvicePostId = await generateAndPost();
-    await bot.sendMessage(
-      ADMIN_CHAT_ID,
-      `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-✅NiceAdvice✅
+// let isRunning = false;
+// cron.schedule('0 0,12 * * *', async () => {
+//   if (isRunning) {
+//     console.log('generateAndPost already running — skipping this run.');
+//     return;
+//   }
+//   isRunning = true;
+//   try {
+//     console.log('Scheduled job start:', new Date().toISOString());
+//     const niceAdvicePostId = await generateAndPost();
+//     await bot.sendMessage(
+//       ADMIN_CHAT_ID,
+//       `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+// ✅NiceAdvice✅
 
-Title:  ${niceAdvicePostId.data.title}
+// Title:  ${niceAdvicePostId.data.title}
 
-https://nice-advice.info/post/${niceAdvicePostId.data.documentId}`,
-      {
-        disable_web_page_preview: true
-      });
-    const cholesterinPostId = await generateAndPostCholesterin();
-    await bot.sendMessage(
-      ADMIN_CHAT_ID,
-      `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-✅CholesterinTipps✅
+// https://nice-advice.info/post/${niceAdvicePostId.data.documentId}`,
+//       {
+//         disable_web_page_preview: true
+//       });
+//     const cholesterinPostId = await generateAndPostCholesterin();
+//     await bot.sendMessage(
+//       ADMIN_CHAT_ID,
+//       `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+// ✅CholesterinTipps✅
 
-Title: ${cholesterinPostId.data.title}
+// Title: ${cholesterinPostId.data.title}
 
-https://cholesterintipps.de/post/${cholesterinPostId.data.documentId}`,
-      {
-        disable_web_page_preview: true
-      });
-    const hairStylesPostId = await generateAndPostHairStyles();
-    await bot.sendMessage(
-      ADMIN_CHAT_ID,
-      `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
-✅HairStylesForSeniors✅
+// https://cholesterintipps.de/post/${cholesterinPostId.data.documentId}`,
+//       {
+//         disable_web_page_preview: true
+//       });
+//     const hairStylesPostId = await generateAndPostHairStyles();
+//     await bot.sendMessage(
+//       ADMIN_CHAT_ID,
+//       `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+// ✅HairStylesForSeniors✅
 
-Title: ${hairStylesPostId.data.title}
+// Title: ${hairStylesPostId.data.title}
 
-https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
-      {
-        disable_web_page_preview: true
-      });
-    console.log('Scheduled job end:', new Date().toISOString());
-  } catch (err) {
-    console.error('Scheduled job error:', err);
-  } finally {
-    isRunning = false;
-  }
-}, {
-  timezone: 'Europe/Kiev'
-});
+// https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
+//       {
+//         disable_web_page_preview: true
+//       });
+//     console.log('Scheduled job end:', new Date().toISOString());
+//   } catch (err) {
+//     console.error('Scheduled job error:', err);
+//   } finally {
+//     isRunning = false;
+//   }
+// }, {
+//   timezone: 'Europe/Kiev'
+// });
 
-cron.schedule('30 9 * * *', async () => {
-  console.log('Running daily site availability check...');
-  try {
-    const report = await checkSitesAvailability();
-    await bot.sendMessage(ADMIN_CHAT_ID, report);
-    console.log('Site check report sent to Telegram.');
-  } catch (error) {
-    console.error('Error during site availability check:', error);
-  }
-}, {
-  timezone: 'Europe/Kiev'
-});
+// cron.schedule('30 9 * * *', async () => {
+//   console.log('Running daily site availability check...');
+//   try {
+//     const report = await checkSitesAvailability();
+//     await bot.sendMessage(ADMIN_CHAT_ID, report);
+//     console.log('Site check report sent to Telegram.');
+//   } catch (error) {
+//     console.error('Error during site availability check:', error);
+//   }
+// }, {
+//   timezone: 'Europe/Kiev'
+// });
 
 server.get('/test-check-sites', async (req, res) => {
   try {
@@ -156,37 +164,54 @@ server.get('/test-check-sites', async (req, res) => {
 });
 
 server.post('/generate-post', async (req, res) => {
-  generateAndPost();
+  try {
+    await generateAndPost();
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ Error in /generate-post:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 server.post('/generate-product', async (req, res) => {
-  const { query, link, country } = req.body;
-  const product = {
-    title: '',
-    descriptionfield1: '',
-    descriptionfield2: '',
-    descriptionfield3: '',
-    descriptionfield4: '',
-    image: '',
-    link: link,
-    country: country
-  }
-  const result = await generateProduct(query);
-  console.log('BodyProductGenerated');
-  product.title = result.title;
-  product.descriptionfield1 = result.descriptionfield1;
-  product.descriptionfield2 = result.descriptionfield2;
-  product.descriptionfield3 = result.descriptionfield3;
-  product.descriptionfield4 = result.descriptionfield4;
-  const imgId = await generateImg(query);
-  product.image = imgId;
-  const postId = await postToStrapi(product);
-  console.log('PostedToStrapi');
-  if (postId) {
-    res.json({ id: postId });
-  }
-  else {
-    res.json({ error: 'ERROR' });
+  try {
+    const { query, link, country } = req.body;
+    const product = {
+      title: '',
+      descriptionfield1: '',
+      descriptionfield2: '',
+      descriptionfield3: '',
+      descriptionfield4: '',
+      image: '',
+      link: link,
+      country: country
+    };
+
+    // Parallelize generating product text and generating image
+    const [result, imgId] = await Promise.all([
+      generateProduct(query),
+      generateImg(query)
+    ]);
+
+    console.log('BodyProductGenerated');
+    product.title = result.title;
+    product.descriptionfield1 = result.descriptionfield1;
+    product.descriptionfield2 = result.descriptionfield2;
+    product.descriptionfield3 = result.descriptionfield3;
+    product.descriptionfield4 = result.descriptionfield4;
+    product.image = imgId;
+
+    const postId = await postToStrapi(product);
+    console.log('PostedToStrapi');
+
+    if (postId) {
+      res.json({ id: postId });
+    } else {
+      res.status(500).json({ error: 'ERROR: No postId returned' });
+    }
+  } catch (err) {
+    console.error("❌ Error in /generate-product:", err);
+    res.status(500).json({ error: err.message });
   }
 })
 
@@ -325,174 +350,193 @@ server.post('/get-trackingId', async (req, res) => {
   res.json(tagFromStrapi);
 })
 
-server.post('/lead', async (req, res) => {
-  const { productId, fbp, fbc, trackingId, trackingDocId, country, external_id } = req.body;
-  const ip = requestIp.getClientIp(req);
-  const userAgent = req.get('user-agent');
-
-  // Используем Mutex для атомарного присвоения тега
-  const release = await tagMutex.acquire();
+server.post("/lead", async (req, res) => {
   try {
-    // Дедупликация: проверяем по fbp, fbc и ip отдельно
-    const now = Date.now();
-    const cacheKeyIp = `ip_${ip}_${productId}`;
-    const cacheKeyFbp = fbp ? `fbp_${fbp}_${productId}` : null;
-    const cacheKeyFbc = fbc ? `fbc_${fbc}_${productId}` : null;
+    const {
+      fbp,
+      fbc,
+      productId,
+      clickDate,
+      tz,
+      ip_address,
+      user_agent,
+      trackingId,
+      external_id,
+      gclid,
+      wbraid,
+      gbraid,
+      campaign_id
+    } = req.body;
+    const ip = requestIp.getClientIp(req);
+    const userAgent = req.get('user-agent');
 
-    const cachedIp = recentLeads.get(cacheKeyIp);
-    const cachedFbp = cacheKeyFbp ? recentLeads.get(cacheKeyFbp) : null;
-    const cachedFbc = cacheKeyFbc ? recentLeads.get(cacheKeyFbc) : null;
+    // Используем Mutex для атомарного присвоения тега
+    const release = await tagMutex.acquire();
+    try {
+      // Дедупликация: проверяем по fbp, fbc и ip отдельно
+      const now = Date.now();
+      const cacheKeyIp = `ip_${ip}_${productId}`;
+      const cacheKeyFbp = fbp ? `fbp_${fbp}_${productId}` : null;
+      const cacheKeyFbc = fbc ? `fbc_${fbc}_${productId}` : null;
 
-    const cached = cachedIp || cachedFbp || cachedFbc;
+      const cachedIp = recentLeads.get(cacheKeyIp);
+      const cachedFbp = cacheKeyFbp ? recentLeads.get(cacheKeyFbp) : null;
+      const cachedFbc = cacheKeyFbc ? recentLeads.get(cacheKeyFbc) : null;
 
-    if (cached && (now - cached.time) < 3600000) {
-      console.log(`♻️ Duplicate lead intercepted for IP: ${ip}, fbp: ${fbp || 'none'}`);
-      return res.json({
-        success: true,
-        trackingId: cached.trackingId,
-        trackingDocId: cached.trackingDocId,
-        cached: true
-      });
-    }
+      const cached = cachedIp || cachedFbp || cachedFbc;
 
-    // Проверяем и бронируем тег (если старый занят - берем новый)
-    const claimedTag = await claimTag(trackingDocId, country);
-
-    if (!claimedTag) {
-      console.warn("⚠️ No available tags found!");
-      return res.status(503).json({ error: "No available tags" });
-    }
-
-    const lead = {
-      productId: productId,
-      clickDate: new Date().toISOString(),
-      client_ip_address: ip,
-      client_user_agent: userAgent,
-      fbp: fbp,
-      fbc: fbc,
-      trackingId: claimedTag.name, // Используем забронированный тег
-      event_name: 'Lead',
-      event_time: `${Math.floor(Date.now() / 1000)}`,
-      event_id: crypto.randomUUID(),
-      event_source_url: 'https://nice-advice.info',
-      action_source: 'website',
-      external_id: external_id || claimedTag.name // Store external_id in lead
-    };
-
-    // Сохраняем лид и отправляем в FB в фоне (без await), чтобы не задерживать юзера
-    leadPushStrapi(lead).catch(err => console.error("❌ Lead saving error:", err));
-    sendLeadToFacebook(lead).catch(err => console.error("FB Lead Error:", err));
-
-    // Обновляем кеш дедупликации
-    const cacheData = {
-      time: now,
-      trackingId: claimedTag.name,
-      trackingDocId: claimedTag.documentId
-    };
-    recentLeads.set(cacheKeyIp, cacheData);
-    if (cacheKeyFbp) recentLeads.set(cacheKeyFbp, cacheData);
-    if (cacheKeyFbc) recentLeads.set(cacheKeyFbc, cacheData);
-
-    // Очистка кеша (опционально, чтобы не рос бесконечно)
-    setTimeout(() => {
-      if (recentLeads.get(cacheKeyIp)?.time === now) recentLeads.delete(cacheKeyIp);
-      if (cacheKeyFbp && recentLeads.get(cacheKeyFbp)?.time === now) recentLeads.delete(cacheKeyFbp);
-      if (cacheKeyFbc && recentLeads.get(cacheKeyFbc)?.time === now) recentLeads.delete(cacheKeyFbc);
-    }, 3660000);
-
-    // Возвращаем финальный тег фронтенду НЕМЕДЛЕННО
-    res.json({
-      success: true,
-      trackingId: claimedTag.name,
-      trackingDocId: claimedTag.documentId
-    });
-
-  } catch (err) {
-    console.error("❌ Lead processing error:", err);
-    res.status(500).json({ error: err.message });
-  } finally {
-    release();
-  }
-});
-
-
-cron.schedule('0 * * * *', async () => {
-  try {
-    console.log('[CRON][TAGS] start resetOldUsedTags');
-
-    const res = await fetch(
-      `${STRAPI_API_URL}/api/tagus/reset-old-used`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: STRAPI_TOKEN,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ hours: 26 }),
+      if (cached) {
+        console.log(`♻️ Duplicate lead intercepted for IP: ${ip}, fbp: ${fbp || 'none'}`);
+        return res.json({
+          success: true,
+          trackingId: cached.trackingId,
+          trackingDocId: cached.trackingDocId,
+          cached: true
+        });
       }
-    );
 
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Strapi error ${res.status}: ${text}`);
+      // Проверяем и бронируем тег (если старый занят - берем новый)
+      const claimedTag = await claimTag(trackingDocId, country);
+
+      if (!claimedTag) {
+        console.warn("⚠️ No available tags found!");
+        return res.status(503).json({ error: "No available tags" });
+      }
+
+      const strapiPayload = {
+        data: {
+          clickDate: clickDate || new Date().toISOString(),
+          client_ip_address: ip,
+          fbp: fbp || "",
+          fbc: fbc || "",
+          productId: productId || "",
+          trackingId: trackingId || "",
+          client_user_agent: userAgent || "",
+          event_name: "Lead",
+          event_time: Math.floor(Date.now() / 1000).toString(),
+          event_id: crypto.randomUUID(),
+          event_source_url: `https://nice-advice.info/product/${productId}`,
+          action_source: "website",
+          isUsed: false,
+          external_id: external_id || null,
+          gclid: gclid || null,
+          wbraid: wbraid || null,
+          gbraid: gbraid || null,
+          campaign_id: campaign_id || null
+        },
+      };
+
+      // Сохраняем лид и отправляем в FB в фоне (без await), чтобы не задерживать юзера
+      leadPushStrapi(strapiPayload).catch(err => console.error("❌ Lead saving error:", err));
+      sendLeadToFacebook(strapiPayload.data).catch(err => console.error("FB Lead Error:", err));
+
+      // Обновляем кеш дедупликации (ttl уже обрабатывается LRUCache автоматически)
+      const cacheData = {
+        trackingId: claimedTag.name,
+        trackingDocId: claimedTag.documentId
+      };
+      recentLeads.set(cacheKeyIp, cacheData);
+      if (cacheKeyFbp) recentLeads.set(cacheKeyFbp, cacheData);
+      if (cacheKeyFbc) recentLeads.set(cacheKeyFbc, cacheData);
+
+      // Возвращаем финальный тег фронтенду НЕМЕДЛЕННО
+      res.json({
+        success: true,
+        trackingId: claimedTag.name,
+        trackingDocId: claimedTag.documentId
+      });
+
+    } catch (err) {
+      console.error("❌ Lead processing error:", err);
+      res.status(500).json({ error: err.message });
+    } finally {
+      release();
     }
-
-    const data = await res.json();
-    console.log(
-      '[CRON][TAGS] done, threshold:',
-      data.thresholdDate
-    );
   } catch (err) {
-    console.error('[CRON][TAGS] error:', err.message);
+    console.error("❌ Outer Lead processing error:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
-cron.schedule("0 * * * *", async () => {
-  const ordersFromAmazon = await ParseAmazonOrders();
-  const leadsFromStrapi = await getLeadsFromStrapi();
-  const matchedLeads = await attachOrdersToLeads(ordersFromAmazon, leadsFromStrapi);
-  const createdPurchasesForStrapi = await createPurchasesToStrapi(matchedLeads);
-  const comissions = await getAmznComissionsFromStrapi();
-  const purchasesToStrapi = await applyCommissionsToPurchases(createdPurchasesForStrapi, comissions);
-  const purchasesLast24h = await getPurchasesFromStrapiLast24h();
-  const newPurchases = await filterNewPurchases(purchasesToStrapi, purchasesLast24h);
 
-  if (newPurchases.length > 0) {
-    await postPurchasesToStrapi(newPurchases);
-  }
+// cron.schedule('0 * * * *', async () => {
+//   try {
+//     console.log('[CRON][TAGS] start resetOldUsedTags');
 
-  const unusedPurchases = await getUnusedPurchasesFromStrapi();
-  const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
+//     const res = await fetch(
+//       `${STRAPI_API_URL}/api/tagus/reset-old-used`,
+//       {
+//         method: 'POST',
+//         headers: {
+//           Authorization: STRAPI_TOKEN,
+//           'Content-Type': 'application/json',
+//         },
+//         body: JSON.stringify({ hours: 26 }),
+//       }
+//     );
 
-  for (const group of sendedToFbGroups) {
-    const { trackingId, items, totalValue } = group;
+//     if (!res.ok) {
+//       const text = await res.text();
+//       throw new Error(`Strapi error ${res.status}: ${text}`);
+//     }
 
-    const message = items
-      .map(p => `
-• ID: ${p.id}
-  ASIN: ${p.asin}
-  Tracking: ${p.trackingId}
-  Price: ${p.price}$
-  Commission: ${p.commission}%
-  Ordered Count: ${p.orderedCount}
-  Category: ${p.category}
-  Value: ${p.value}$
-  Title: ${p.title}
-`.trim())
-      .join("\n\n");
+//     const data = await res.json();
+//     console.log(
+//       '[CRON][TAGS] done, threshold:',
+//       data.thresholdDate
+//     );
+//   } catch (err) {
+//     console.error('[CRON][TAGS] error:', err.message);
+//   }
+// });
 
-    await bot.sendMessage(
-      TG_BOT_ORDERS_ID,
-      `⭐️⭐️⭐️ NEW ORDERS ⭐️⭐️⭐️
+// cron.schedule("0 * * * *", async () => {
+//   const ordersFromAmazon = await ParseAmazonOrders();
+//   const leadsFromStrapi = await getLeadsFromStrapi();
+//   const matchedLeads = await attachOrdersToLeads(ordersFromAmazon, leadsFromStrapi);
+//   const createdPurchasesForStrapi = await createPurchasesToStrapi(matchedLeads);
+//   const comissions = await getAmznComissionsFromStrapi();
+//   const purchasesToStrapi = await applyCommissionsToPurchases(createdPurchasesForStrapi, comissions);
+//   const purchasesLast24h = await getPurchasesFromStrapiLast24h();
+//   const newPurchases = await filterNewPurchases(purchasesToStrapi, purchasesLast24h);
 
-New orders sent to Facebook (Group: ${trackingId})
-💰 Total Group Value: ${totalValue}$
+//   if (newPurchases.length > 0) {
+//     await postPurchasesToStrapi(newPurchases);
+//   }
 
-${message}
-`
-    );
-  }
-});
+//   const unusedPurchases = await getUnusedPurchasesFromStrapi();
+//   const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
+//   const sendedToGoogleGroups = await sendPurchasesToGoogleAdsAndMarkUsed(unusedPurchases);
+
+//   for (const group of sendedToFbGroups) {
+//     const { trackingId, items, totalValue } = group;
+
+//     const message = items
+//       .map(p => `
+// • ID: ${p.id}
+//   ASIN: ${p.asin}
+//   Tracking: ${p.trackingId}
+//   Price: ${p.price}$
+//   Commission: ${p.commission}%
+//   Ordered Count: ${p.orderedCount}
+//   Category: ${p.category}
+//   Value: ${p.value}$
+//   Title: ${p.title}
+// `.trim())
+//       .join("\n\n");
+
+//     await bot.sendMessage(
+//       TG_BOT_ORDERS_ID,
+//       `⭐️⭐️⭐️ NEW ORDERS ⭐️⭐️⭐️
+
+// New orders sent to Facebook (Group: ${trackingId})
+// 💰 Total Group Value: ${totalValue}$
+
+// ${message}
+// `
+//     );
+//   }
+// });
 
 
 
