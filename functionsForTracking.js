@@ -361,8 +361,7 @@ const getUnusedPurchasesFromStrapi = async () => {
     while (page <= pageCount) {
       const url =
         `${STRAPI_API_URL}/api/purchases` +
-        `?filters[$or][0][isUsed][$eq]=false` +
-        `&filters[$or][1][isGoogleUsed][$eq]=false` +
+        `?filters[isUsed][$eq]=false` +
         `&pagination[page]=${page}` +
         `&pagination[pageSize]=${pageSize}` +
         `&sort[0]=createdAt:asc`;

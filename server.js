@@ -16,7 +16,6 @@ import requestIp from 'request-ip';
 import { LRUCache } from 'lru-cache'; // <-- Added LRUCache import
 import { ParseAmazonOrders } from './playwright/getEarningsData.js';
 import { applyCommissionsToPurchases, attachOrdersToLeads, createPurchasesToStrapi, filterNewPurchases, getAmznComissionsFromStrapi, getLeadsFromStrapi, getPurchasesFromStrapiLast24h, getUnusedPurchasesFromStrapi, postPurchasesToStrapi, sendPurchasesToFacebookAndMarkUsed, sendLeadToFacebook } from './functionsForTracking.js';
-import { sendPurchasesToGoogleAdsAndMarkUsed } from './functionsForGoogleAds.js';
 import { generateCommonTitle, generateProductsArray, postMultiproductToStrapi } from './functionsForMultiproducts.js';
 import { checkSitesAvailability } from './siteChecker.js';
 const server = express();
@@ -506,7 +505,6 @@ cron.schedule("0 * * * *", async () => {
 
   const unusedPurchases = await getUnusedPurchasesFromStrapi();
   const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
-  const sendedToGoogleGroups = await sendPurchasesToGoogleAdsAndMarkUsed(unusedPurchases);
 
   for (const group of sendedToFbGroups) {
     const { trackingId, items, totalValue } = group;
