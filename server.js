@@ -405,6 +405,19 @@ server.post("/lead", async (req, res) => {
         return res.status(503).json({ error: "No available tags" });
       }
 
+      let clean_event_source_url = event_source_url || `https://nice-advice.info/product/${productId}`;
+      try {
+        const parsedUrl = new URL(clean_event_source_url);
+        const campId = parsedUrl.searchParams.get('campaign_id') || campaign_id;
+        parsedUrl.search = ''; // Remove all query parameters
+        if (campId) {
+          parsedUrl.searchParams.set('campaign_id', campId);
+        }
+        clean_event_source_url = parsedUrl.toString();
+      } catch (e) {
+        // fallback
+      }
+
       const strapiPayload = {
         clickDate: clickDate || new Date().toISOString(),
         client_ip_address: ip,
@@ -416,7 +429,7 @@ server.post("/lead", async (req, res) => {
         event_name: "Lead",
         event_time: Math.floor(Date.now() / 1000).toString(),
         event_id: crypto.randomUUID(),
-        event_source_url: event_source_url || `https://nice-advice.info/product/${productId}`,
+        event_source_url: clean_event_source_url,
         action_source: "website",
         isUsed: false,
         external_id: external_id || null,
@@ -490,52 +503,63 @@ cron.schedule('0 * * * *', async () => {
   }
 });
 
-cron.schedule("0 * * * *", async () => {
-  const ordersFromAmazon = await ParseAmazonOrders();
-  const leadsFromStrapi = await getLeadsFromStrapi();
-  const matchedLeads = await attachOrdersToLeads(ordersFromAmazon, leadsFromStrapi);
-  const createdPurchasesForStrapi = await createPurchasesToStrapi(matchedLeads);
-  const comissions = await getAmznComissionsFromStrapi();
-  const purchasesToStrapi = await applyCommissionsToPurchases(createdPurchasesForStrapi, comissions);
-  const purchasesLast24h = await getPurchasesFromStrapiLast24h();
-  const newPurchases = await filterNewPurchases(purchasesToStrapi, purchasesLast24h);
+async function processAmazonOrders() {
+  console.log("🔄 Starting Amazon Orders Processing...");
+  try {
+    const ordersFromAmazon = await ParseAmazonOrders();
+    const leadsFromStrapi = await getLeadsFromStrapi();
+    const matchedLeads = await attachOrdersToLeads(ordersFromAmazon, leadsFromStrapi);
+    const createdPurchasesForStrapi = await createPurchasesToStrapi(matchedLeads);
+    const comissions = await getAmznComissionsFromStrapi();
+    const purchasesToStrapi = await applyCommissionsToPurchases(createdPurchasesForStrapi, comissions);
+    const purchasesLast24h = await getPurchasesFromStrapiLast24h();
+    const newPurchases = await filterNewPurchases(purchasesToStrapi, purchasesLast24h);
 
-  if (newPurchases.length > 0) {
-    await postPurchasesToStrapi(newPurchases);
+    if (newPurchases.length > 0) {
+      await postPurchasesToStrapi(newPurchases);
+    }
+
+    const unusedPurchases = await getUnusedPurchasesFromStrapi();
+    const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
+
+    for (const group of sendedToFbGroups) {
+      const { trackingId, items, totalValue } = group;
+
+      const message = items
+        .map(p => `
+  • ID: ${p.id}
+    ASIN: ${p.asin}
+    Tracking: ${p.trackingId}
+    Price: ${p.price}$
+    Commission: ${p.commission}%
+    Ordered Count: ${p.orderedCount}
+    Category: ${p.category}
+    Value: ${p.value}$
+    Title: ${p.title}
+  `.trim())
+        .join("\n\n");
+
+      await bot.sendMessage(
+        TG_BOT_ORDERS_ID,
+        `⭐️⭐️⭐️ NEW ORDERS ⭐️⭐️⭐️
+
+  New orders sent to Facebook (Group: ${trackingId})
+  💰 Total Group Value: ${totalValue}$
+
+  ${message}
+  `
+      );
+    }
+    console.log("✅ Finished Amazon Orders Processing.");
+  } catch (err) {
+    console.error("❌ Error in processAmazonOrders:", err);
   }
+}
 
-  const unusedPurchases = await getUnusedPurchasesFromStrapi();
-  const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
+cron.schedule("0 * * * *", processAmazonOrders);
 
-  for (const group of sendedToFbGroups) {
-    const { trackingId, items, totalValue } = group;
-
-    const message = items
-      .map(p => `
-• ID: ${p.id}
-  ASIN: ${p.asin}
-  Tracking: ${p.trackingId}
-  Price: ${p.price}$
-  Commission: ${p.commission}%
-  Ordered Count: ${p.orderedCount}
-  Category: ${p.category}
-  Value: ${p.value}$
-  Title: ${p.title}
-`.trim())
-      .join("\n\n");
-
-    await bot.sendMessage(
-      TG_BOT_ORDERS_ID,
-      `⭐️⭐️⭐️ NEW ORDERS ⭐️⭐️⭐️
-
-New orders sent to Facebook (Group: ${trackingId})
-💰 Total Group Value: ${totalValue}$
-
-${message}
-`
-    );
-  }
-});
+// Run immediately for the user request
+// processAmazonOrders();
 
 
 

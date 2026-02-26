@@ -189,13 +189,13 @@ const createPurchasesToStrapi = (matchedLeads) => {
 
         value: order.price * order.orderedCount,
 
-        event_source_url: lead.event_source_url || `https://nice-advice.info/product/${productId}`,
+        event_source_url: (lead.event_source_url || `https://nice-advice.info/product/${productId}`).substring(0, 254),
         action_source: action_source || "website",
         isUsed: false,
 
         // 🔹 данные заказа
-        title: order.title,
-        itemUrl: order.itemUrl,
+        title: order.title ? order.title.substring(0, 254) : null,
+        itemUrl: order.itemUrl ? order.itemUrl.substring(0, 254) : null,
         ASIN: order.ASIN,
         category: order.category,
         merchant: order.merchant,
@@ -262,6 +262,7 @@ const postPurchasesToStrapi = async (purchases) => {
 
       if (!res.ok) {
         const text = await res.text();
+        console.error("❌ Strapi 500 payload:", JSON.stringify(purchase, null, 2));
         throw new Error(`Strapi error ${res.status}: ${text}`);
       }
 
