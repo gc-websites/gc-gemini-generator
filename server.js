@@ -366,7 +366,8 @@ server.post("/lead", async (req, res) => {
       gclid,
       wbraid,
       gbraid,
-      campaign_id
+      campaign_id,
+      event_source_url
     } = req.body;
     const ip = requestIp.getClientIp(req);
     const userAgent = req.get('user-agent');
@@ -415,7 +416,7 @@ server.post("/lead", async (req, res) => {
         event_name: "Lead",
         event_time: Math.floor(Date.now() / 1000).toString(),
         event_id: crypto.randomUUID(),
-        event_source_url: `https://nice-advice.info/product/${productId}`,
+        event_source_url: event_source_url || `https://nice-advice.info/product/${productId}`,
         action_source: "website",
         isUsed: false,
         external_id: external_id || null,

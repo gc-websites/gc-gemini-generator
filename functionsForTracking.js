@@ -189,7 +189,7 @@ const createPurchasesToStrapi = (matchedLeads) => {
 
         value: order.price * order.orderedCount,
 
-        event_source_url: `https://nice-advice.info/product/${productId}`,
+        event_source_url: lead.event_source_url || `https://nice-advice.info/product/${productId}`,
         action_source: action_source || "website",
         isUsed: false,
 
