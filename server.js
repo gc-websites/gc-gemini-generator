@@ -406,26 +406,24 @@ server.post("/lead", async (req, res) => {
       }
 
       const strapiPayload = {
-        data: {
-          clickDate: clickDate || new Date().toISOString(),
-          client_ip_address: ip,
-          fbp: fbp || "",
-          fbc: fbc || "",
-          productId: productId || "",
-          trackingId: trackingId || "",
-          client_user_agent: userAgent || "",
-          event_name: "Lead",
-          event_time: Math.floor(Date.now() / 1000).toString(),
-          event_id: crypto.randomUUID(),
-          event_source_url: `https://nice-advice.info/product/${productId}`,
-          action_source: "website",
-          isUsed: false,
-          external_id: external_id || null,
-          gclid: gclid || null,
-          wbraid: wbraid || null,
-          gbraid: gbraid || null,
-          campaign_id: campaign_id || null
-        },
+        clickDate: clickDate || new Date().toISOString(),
+        client_ip_address: ip,
+        fbp: fbp || "",
+        fbc: fbc || "",
+        productId: productId || "",
+        trackingId: trackingId || "",
+        client_user_agent: userAgent || "",
+        event_name: "Lead",
+        event_time: Math.floor(Date.now() / 1000).toString(),
+        event_id: crypto.randomUUID(),
+        event_source_url: `https://nice-advice.info/product/${productId}`,
+        action_source: "website",
+        isUsed: false,
+        external_id: external_id || null,
+        gclid: gclid || null,
+        wbraid: wbraid || null,
+        gbraid: gbraid || null,
+        campaign_id: campaign_id || null
       };
 
       // Сохраняем лид и отправляем в FB в фоне (без await), чтобы не задерживать юзера
