@@ -361,6 +361,8 @@ server.post("/lead", async (req, res) => {
       ip_address,
       user_agent,
       trackingId,
+      trackingDocId,
+      country,
       external_id,
       gclid,
       wbraid,
