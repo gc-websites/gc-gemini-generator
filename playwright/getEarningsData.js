@@ -29,7 +29,7 @@ async function clickFirstVisible(locators, label) {
       await loc.click({ force: true });
       console.log(`✅ Clicked: ${label}`);
       return true;
-    } catch (_) {}
+    } catch (_) { }
   }
   return false;
 }
@@ -44,7 +44,7 @@ async function parseOrdersFromCurrentPage(page) {
   const spinner = ordersContainer.locator(".a-dtt-spinner");
   try {
     await spinner.waitFor({ state: "hidden", timeout: 15000 });
-  } catch (_) {}
+  } catch (_) { }
 
   const ordersTable = ordersContainer
     .locator("table.a-dtt-table")
@@ -60,7 +60,7 @@ async function parseOrdersFromCurrentPage(page) {
     return rows.map((row) => {
       const cells = row.querySelectorAll("td");
       const titleCell = cells[0];
-      const linkEl = titleCell.querySelector("a");
+      const linkEl = titleCell?.querySelector("a");
 
       const itemUrl = linkEl?.getAttribute("href") || null;
 
@@ -86,10 +86,20 @@ async function parseOrdersFromCurrentPage(page) {
       const rawOrderedCount = cells[3]?.textContent?.trim() || "0";
       const orderedCount = Number(rawOrderedCount) || 0;
 
+      let title = linkEl?.textContent?.trim() || null;
+      // The new title format sometimes includes a leading number (e.g. "1Amazon Basics Facial Tissue")
+      // Extract starting index if it exists in the raw text Content
+      const rawTitleCellText = titleCell?.textContent?.trim() || "";
+      const match = rawTitleCellText.match(/^(\d+)/);
+      const indexStr = match ? match[1] : null;
+
+      if (title && indexStr && title.startsWith(indexStr)) {
+        title = title.substring(indexStr.length).trim();
+      }
+
       return {
-        index:
-          titleCell.querySelector(".item-id")?.textContent?.trim() || null,
-        title: linkEl?.textContent?.trim() || null,
+        index: indexStr,
+        title: title,
         itemUrl,
         ASIN,
         category: cells[1]?.textContent?.trim() || null,
