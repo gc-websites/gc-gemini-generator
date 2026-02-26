@@ -428,7 +428,7 @@ server.post("/lead", async (req, res) => {
 
       // Сохраняем лид и отправляем в FB в фоне (без await), чтобы не задерживать юзера
       leadPushStrapi(strapiPayload).catch(err => console.error("❌ Lead saving error:", err));
-      sendLeadToFacebook(strapiPayload.data).catch(err => console.error("FB Lead Error:", err));
+      sendLeadToFacebook(strapiPayload).catch(err => console.error("FB Lead Error:", err));
 
       // Обновляем кеш дедупликации (ttl уже обрабатывается LRUCache автоматически)
       const cacheData = {
