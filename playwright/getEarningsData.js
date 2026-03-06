@@ -39,18 +39,35 @@ async function clickFirstVisible(locators, label) {
 ========================= */
 async function parseOrdersFromCurrentPage(page) {
   const ordersContainer = page.locator("#ac-report-earning-summary-tbl");
-  await ordersContainer.waitFor({ state: "visible", timeout: 20000 });
+
+  // Wait for the container to be attached to the DOM (it may visually be hidden while loading)
+  await ordersContainer.waitFor({ state: "attached", timeout: 30000 });
+
+  // Wait for Amazon's native loading class to be removed
+  try {
+    await page.waitForFunction(() => {
+      const el = document.querySelector("#ac-report-earning-summary-tbl");
+      return el && !el.classList.contains("a-dtt-busy");
+    }, { timeout: 30000 });
+  } catch (err) {
+    console.log("⚠️ Timeout waiting for a-dtt-busy to disappear");
+  }
 
   const spinner = ordersContainer.locator(".a-dtt-spinner");
   try {
-    await spinner.waitFor({ state: "hidden", timeout: 15000 });
+    if (await spinner.count() > 0) {
+      await spinner.waitFor({ state: "hidden", timeout: 15000 });
+    }
   } catch (_) { }
 
-  const ordersTable = ordersContainer
-    .locator("table.a-dtt-table")
-    .first();
+  const ordersTable = ordersContainer.locator("table.a-dtt-table").first();
 
-  await ordersTable.waitFor({ state: "visible", timeout: 20000 });
+  try {
+    await ordersTable.waitFor({ state: "attached", timeout: 20000 });
+  } catch (err) {
+    console.log("⚠️ ordersTable not attached. Maybe 0 orders?");
+    return [];
+  }
 
   const orders = await ordersTable.evaluate((table) => {
     const rows = Array.from(
