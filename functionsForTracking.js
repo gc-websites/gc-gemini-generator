@@ -599,6 +599,7 @@ const sendPurchasesToFacebookAndMarkUsed = async (purchases) => {
             orderedCount: purchase.orderedCount,
             price: purchase.price,
             category: purchase.category,
+            ccRate: purchase.ccRate
           });
         }
       }

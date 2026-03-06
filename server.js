@@ -18,6 +18,7 @@ import { ParseAmazonOrders } from './playwright/getEarningsData.js';
 import { applyCommissionsToPurchases, attachOrdersToLeads, createPurchasesToStrapi, filterNewPurchases, getAmznComissionsFromStrapi, getLeadsFromStrapi, getPurchasesFromStrapiLast24h, getUnusedPurchasesFromStrapi, postPurchasesToStrapi, sendPurchasesToFacebookAndMarkUsed, sendLeadToFacebook } from './functionsForTracking.js';
 import { generateCommonTitle, generateProductsArray, postMultiproductToStrapi } from './functionsForMultiproducts.js';
 import { checkSitesAvailability } from './siteChecker.js';
+import { runAmazonCCApproval } from './functionsForAmazonCC.js';
 const server = express();
 const PORT = process.env.PORT || 4000;
 dotenv.config();
@@ -520,7 +521,8 @@ async function processAmazonOrders() {
     }
 
     const unusedPurchases = await getUnusedPurchasesFromStrapi();
-    const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(unusedPurchases);
+    const approvedPurchases = await runAmazonCCApproval(unusedPurchases);
+    const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(approvedPurchases);
 
     for (const group of sendedToFbGroups) {
       const { trackingId, items, totalValue } = group;
@@ -531,7 +533,7 @@ async function processAmazonOrders() {
     ASIN: ${p.asin}
     Tracking: ${p.trackingId}
     Price: ${p.price}$
-    Commission: ${p.commission}%
+    Commission: ${p.ccRate ? p.commission + '% + ' + p.ccRate : p.commission}%
     Ordered Count: ${p.orderedCount}
     Category: ${p.category}
     Value: ${p.value}$
@@ -558,8 +560,7 @@ async function processAmazonOrders() {
 
 cron.schedule("0 * * * *", processAmazonOrders);
 
-// Run immediately for the user request
-// processAmazonOrders();
+
 
 
 
@@ -612,6 +613,49 @@ server.get('/test', async (req, res) => {
   }
 
 })
+
+server.get('/test-amazon-flow', async (req, res) => {
+  console.log("🔄 Starting test run for Amazon CC flow (skipping new order extraction)...");
+  try {
+    const unusedPurchases = await getUnusedPurchasesFromStrapi();
+    const approvedPurchases = await runAmazonCCApproval(unusedPurchases);
+    const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(approvedPurchases);
+
+    for (const group of sendedToFbGroups) {
+      const { trackingId, items, totalValue } = group;
+
+      const message = items
+        .map(p => `
+  • ID: ${p.id}
+    ASIN: ${p.asin}
+    Tracking: ${p.trackingId}
+    Price: ${p.price}$
+    Commission: ${p.ccRate ? p.commission + '% + ' + p.ccRate : p.commission}%
+    Ordered Count: ${p.orderedCount}
+    Category: ${p.category}
+    Value: ${p.value}$
+    Title: ${p.title}
+  `.trim())
+        .join("\n\n");
+
+      await bot.sendMessage(
+        TG_BOT_ORDERS_ID,
+        `⭐️⭐️⭐️ TEST: NEW ORDERS ⭐️⭐️⭐️
+
+  New orders sent to Facebook (Group: ${trackingId})
+  💰 Total Group Value: ${totalValue}$
+
+  ${message}
+  `
+      );
+    }
+    console.log("✅ Finished test run.");
+    res.json({ success: true, sendedToFbGroups });
+  } catch (err) {
+    console.error("❌ Error in test run:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 server.listen(PORT, () => {
   console.log(`Server started: http://localhost:${PORT}`);
