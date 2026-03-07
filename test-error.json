@@ -1,0 +1,1 @@
+{"data":null,"error":{"status":400,"name":"ValidationError","message":"Invalid key \\* at product3","details":{"key":"\\*","path":"product3","source":"query","param":"populate"}}}

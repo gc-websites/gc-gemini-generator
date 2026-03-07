@@ -3,18 +3,14 @@ import { GoogleGenAI } from "@google/genai";
 import fetch from "node-fetch";
 import FormData from "form-data";
 import dotenv from 'dotenv';
-import pkg from "paapi5-nodejs-sdk";
 
 dotenv.config();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const STRAPI_TOKEN = process.env.STRAPI_TOKEN;
 const STRAPI_API_URL = process.env.STRAPI_API_URL;
-const accessKey = process.env.PAAPI_ACCESS_KEY;
-const secretKey = process.env.PAAPI_SECRET_KEY;
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const ai = new GoogleGenAI(GEMINI_API_KEY);
-const { DefaultApi, GetItemsRequest, Configuration } = pkg;
 
 const getTags = async (country) => {
   let strapiUrl;

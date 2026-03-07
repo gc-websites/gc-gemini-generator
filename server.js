@@ -275,6 +275,36 @@ server.get('/get-product-v2/:id', async (req, res) => {
   }
 })
 
+server.get('/get-product-v3/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const url = `${STRAPI_API_URL}/api/product-v3s/${id}?populate[0]=titleImg&populate[1]=subImg&populate[2]=product3.img`;
+    const strapiRes = await fetch(url, {
+      headers: {
+        Authorization: STRAPI_TOKEN,
+      },
+    });
+    if (strapiRes.status === 404) {
+      console.log(`⚠️ Product V3 not found (404) for ID: ${id}`);
+      return res.status(404).json({ error: "Product V3 not found" });
+    }
+
+    if (!strapiRes.ok) {
+      throw new Error(`Strapi error: ${strapiRes.statusText} for ID: ${id}`);
+    }
+
+    const product = await strapiRes.json();
+    if (!product.data || product.data === null) {
+      console.log(`⚠️ Product V3 not found (404) for ID: ${id}`);
+      return res.status(404).json({ error: "Product V3 not found" });
+    }
+    res.json(product);
+  } catch (err) {
+    console.error("❌ Error fetching product-v3:", err);
+    res.status(500).json({ error: err.message });
+  }
+})
+
 server.get('/get-multiproduct/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -309,8 +339,6 @@ server.get('/get-multiproduct/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-
 
 server.post('/fbclid', async (req, res) => {
   const { fbclid, productId, tag } = req.body;
