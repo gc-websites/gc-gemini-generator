@@ -13,6 +13,13 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const ai = new GoogleGenAI(GEMINI_API_KEY);
 
 const getTags = async (country) => {
+  if (country === 'Spain' || country === 'ES' || country === 'es') {
+    return {
+      documentId: 'spainstore0f-21',
+      name: 'spainstore0f-21'
+    };
+  }
+
   let strapiUrl;
   const normalizedCountry = (country === 'CA' || country === 'Canada') ? 'Canada' : 'USA';
 
@@ -199,6 +206,13 @@ const updateTagStatus = async (tagDocId, country) => {
 }
 
 const getTag = async (country) => {
+  if (country === 'Spain' || country === 'ES' || country === 'es') {
+    return {
+      documentId: 'spainstore0f-21',
+      name: 'spainstore0f-21'
+    };
+  }
+
   let endpoint;
   const normalizedCountry = (country === 'CA' || country === 'Canada') ? 'Canada' : 'USA';
 
@@ -324,6 +338,13 @@ const resetOldTags = async () => {
 
 
 const claimTag = async (proposedTagDocId, country) => {
+  if (country === 'Spain' || country === 'ES' || country === 'es') {
+    return {
+      documentId: 'spainstore0f-21',
+      name: 'spainstore0f-21'
+    };
+  }
+
   let collection;
   const normalizedCountry = (country === 'CA' || country === 'Canada') ? 'Canada' : 'USA';
 
