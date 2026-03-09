@@ -14,10 +14,11 @@ const ai = new GoogleGenAI(GEMINI_API_KEY);
 
 const getTags = async (country) => {
   let strapiUrl;
+  const normalizedCountry = (country === 'CA' || country === 'Canada') ? 'Canada' : 'USA';
 
-  if (country === 'USA') {
+  if (normalizedCountry === 'USA') {
     strapiUrl = `${STRAPI_API_URL}/api/taguses`;
-  } else if (country === 'Canada') {
+  } else if (normalizedCountry === 'Canada') {
     strapiUrl = `${STRAPI_API_URL}/api/tagcas`;
   } else {
     throw new Error("Unsupported country");
@@ -199,10 +200,11 @@ const updateTagStatus = async (tagDocId, country) => {
 
 const getTag = async (country) => {
   let endpoint;
+  const normalizedCountry = (country === 'CA' || country === 'Canada') ? 'Canada' : 'USA';
 
-  if (country === 'USA') {
+  if (normalizedCountry === 'USA') {
     endpoint = "taguses";
-  } else if (country === 'Canada' || country === 'CA') {
+  } else if (normalizedCountry === 'Canada') {
     endpoint = "tagcas";
   } else {
     throw new Error("Unsupported tag format");
