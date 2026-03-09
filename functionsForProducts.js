@@ -66,6 +66,9 @@ const getTags = async (country) => {
 };
 
 const generateRefLink = (link, partnerTag) => {
+  if (partnerTag === 'spainstore0f-21') {
+    return `${link}&tag=${partnerTag}`;
+  }
   const refLink = `${link}&tag=${partnerTag}-20`;
   return refLink;
 }
