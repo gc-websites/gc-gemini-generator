@@ -245,6 +245,36 @@ server.get('/get-product/:id', async (req, res) => {
   }
 })
 
+server.get('/get-product-temu/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const strapiRes = await fetch(`${STRAPI_API_URL}/api/product-temus/${id}?populate=image`, {
+      headers: {
+        Authorization: STRAPI_TOKEN,
+      },
+    });
+
+    if (strapiRes.status === 404) {
+      console.log(`⚠️ Temu Product not found (404) for ID: ${id}`);
+      return res.status(404).json({ error: "Temu Product not found" });
+    }
+
+    if (!strapiRes.ok) {
+      throw new Error(`Strapi error: ${strapiRes.statusText}`);
+    }
+
+    const product = await strapiRes.json();
+    if (!product.data || product.data === null) {
+      console.log(`⚠️ Temu Product not found (404) for ID: ${id}`);
+      return res.status(404).json({ error: "Temu Product not found" });
+    }
+    res.json(product);
+  } catch (err) {
+    console.error("❌ Error fetching temu product:", err);
+    res.status(500).json({ error: err.message });
+  }
+})
+
 server.get('/get-product-v2/:id', async (req, res) => {
   const { id } = req.params;
   try {
