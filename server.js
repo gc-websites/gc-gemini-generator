@@ -715,6 +715,83 @@ server.get('/test-amazon-flow', async (req, res) => {
   }
 });
 
+// ─── Click Tracking for Prelend Analytics ───
+function getDeviceType(ua) {
+  if (!ua) return 'unknown';
+  ua = ua.toLowerCase();
+  if (/tablet|ipad|playbook|silk/.test(ua)) return 'tablet';
+  if (/mobile|iphone|ipod|android.*mobile|windows phone|blackberry/.test(ua)) return 'mobile';
+  return 'desktop';
+}
+
+server.post('/track-click', async (req, res) => {
+  try {
+    const ip = requestIp.getClientIp(req);
+    const userAgent = req.get('user-agent') || '';
+    const deviceType = getDeviceType(userAgent);
+
+    const {
+      session_id,
+      event_type,
+      prelend_slug,
+      locale,
+      source_url,
+      destination_url,
+      referrer,
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_term,
+      utm_content,
+      screen_width,
+      screen_height,
+      clicked_at,
+      gclid,
+      fbclid,
+    } = req.body;
+
+    const payload = {
+      data: {
+        session_id: session_id || null,
+        event_type: event_type || null,
+        prelend_slug: prelend_slug || null,
+        locale: locale || null,
+        source_url: source_url || null,
+        destination_url: destination_url || null,
+        referrer: referrer || null,
+        utm_source: utm_source || null,
+        utm_medium: utm_medium || null,
+        utm_campaign: utm_campaign || null,
+        utm_term: utm_term || null,
+        utm_content: utm_content || null,
+        client_ip: ip || null,
+        user_agent: userAgent || null,
+        device_type: deviceType,
+        screen_width: screen_width || null,
+        screen_height: screen_height || null,
+        clicked_at: clicked_at || new Date().toISOString(),
+        gclid: gclid || null,
+        fbclid: fbclid || null,
+      }
+    };
+
+    // Fire-and-forget to Strapi — don't block the response
+    fetch(`${STRAPI_API_URL}/api/click-events`, {
+      method: 'POST',
+      headers: {
+        Authorization: STRAPI_TOKEN,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    }).catch(err => console.error('❌ Click tracking Strapi error:', err.message));
+
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('❌ Click tracking error:', err);
+    res.status(200).json({ ok: true }); // Always return 200 to not break UX
+  }
+});
+
 server.listen(PORT, () => {
   console.log(`Server started: http://localhost:${PORT}`);
 });
