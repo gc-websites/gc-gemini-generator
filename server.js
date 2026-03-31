@@ -370,7 +370,7 @@ server.get('/get-multiproduct/:id', async (req, res) => {
   }
 });
 
-server.post('/fbclid', async (req, res) => {
+/* server.post('/fbclid', async (req, res) => {
   const { fbclid, productId, tag } = req.body;
   const tagFromStrapi = await getTag(tag);
   const tagId = tagFromStrapi.documentId
@@ -381,7 +381,7 @@ server.post('/fbclid', async (req, res) => {
     const result = await updateTagFbclid(fbclid, productId, tag, tagId);
     res.json(result);
   }
-})
+}) */
 
 server.post('/email', async (req, res) => {
   const { email, source } = req.body;
@@ -402,13 +402,13 @@ server.post('/email', async (req, res) => {
   }
 });
 
-server.post('/get-trackingId', async (req, res) => {
+/* server.post('/get-trackingId', async (req, res) => {
   const { country } = req.body;
   const tagFromStrapi = await getTag(country);
   res.json(tagFromStrapi);
-})
+}) */
 
-server.post("/lead", async (req, res) => {
+/* server.post("/lead", async (req, res) => {
   try {
     const {
       fbp,
@@ -528,10 +528,10 @@ server.post("/lead", async (req, res) => {
     console.error("❌ Outer Lead processing error:", err);
     res.status(500).json({ error: err.message });
   }
-});
+}); */
 
 
-cron.schedule('0 * * * *', async () => {
+/* cron.schedule('0 * * * *', async () => {
   try {
     console.log('[CRON][TAGS] start resetOldUsedTags');
 
@@ -560,9 +560,9 @@ cron.schedule('0 * * * *', async () => {
   } catch (err) {
     console.error('[CRON][TAGS] error:', err.message);
   }
-});
+}); */
 
-async function processAmazonOrders() {
+/* async function processAmazonOrders() {
   console.log("🔄 Starting Amazon Orders Processing...");
   try {
     const ordersFromAmazon = await ParseAmazonOrders();
@@ -616,7 +616,7 @@ async function processAmazonOrders() {
   }
 }
 
-cron.schedule("0 * * * *", processAmazonOrders);
+cron.schedule("0 * * * *", processAmazonOrders); */
 
 
 
@@ -657,7 +657,7 @@ server.post('/generate-multiproducts', async (req, res) => {
 
 
 
-server.get('/test', async (req, res) => {
+/* server.get('/test', async (req, res) => {
 
   try {
     for (let i = 0; i < 100; i++) {
@@ -670,9 +670,9 @@ server.get('/test', async (req, res) => {
     res.status(500).send({ success: false, error: error.message });
   }
 
-})
+}) */
 
-server.get('/test-amazon-flow', async (req, res) => {
+/* server.get('/test-amazon-flow', async (req, res) => {
   console.log("🔄 Starting test run for Amazon CC flow (skipping new order extraction)...");
   try {
     const unusedPurchases = await getUnusedPurchasesFromStrapi();
@@ -713,7 +713,7 @@ server.get('/test-amazon-flow', async (req, res) => {
     console.error("❌ Error in test run:", err);
     res.status(500).json({ error: err.message });
   }
-});
+}); */
 
 // ─── Click Tracking for Prelend Analytics ───
 function getDeviceType(ua) {
