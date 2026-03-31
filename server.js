@@ -726,9 +726,24 @@ function getDeviceType(ua) {
 
 server.post('/track-click', async (req, res) => {
   try {
-    const ip = requestIp.getClientIp(req);
+    let ip = requestIp.getClientIp(req);
+    if (ip && ip.includes('::ffff:')) {
+      ip = ip.replace('::ffff:', '');
+    }
     const userAgent = req.get('user-agent') || '';
     const deviceType = getDeviceType(userAgent);
+
+    // Try to get country from IP if geoip-lite is installed
+    let country = '';
+    try {
+      const geoip = await import('geoip-lite');
+      const geo = geoip.default.lookup(ip);
+      if (geo) {
+        country = geo.country;
+      }
+    } catch (e) {
+      // geoip-lite not installed or lookup failed
+    }
 
     const {
       session_id,
@@ -766,6 +781,7 @@ server.post('/track-click', async (req, res) => {
         utm_content: utm_content || null,
         client_ip: ip || null,
         user_agent: userAgent || null,
+        country: country || null,
         device_type: deviceType,
         screen_width: screen_width || null,
         screen_height: screen_height || null,
