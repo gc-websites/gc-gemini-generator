@@ -763,6 +763,10 @@ server.post('/track-click', async (req, res) => {
       clicked_at,
       gclid,
       fbclid,
+      fb_pixel,
+      fb_event,
+      fb_pixel_mode,
+      fb_fire_type,
     } = req.body;
 
     const payload = {
@@ -788,6 +792,10 @@ server.post('/track-click', async (req, res) => {
         clicked_at: clicked_at || new Date().toISOString(),
         gclid: gclid || null,
         fbclid: fbclid || null,
+        fb_pixel: fb_pixel || null,
+        fb_event: fb_event || null,
+        fb_pixel_mode: fb_pixel_mode || null,
+        fb_fire_type: fb_fire_type || null,
       }
     };
 
