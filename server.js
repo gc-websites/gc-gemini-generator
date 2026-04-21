@@ -48,6 +48,7 @@ const corsOptions = {
     'https://www.nice-advice.info',
     'http://localhost:5173',
     'https://cholesterintipps.de',
+    'https://www.cholesterintipps.de',
     'https://dev.nice-advice.info',
     'https://www.dev.nice-advice.info',
     'https://hairstylesforseniors.com',
