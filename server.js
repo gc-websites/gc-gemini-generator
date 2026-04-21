@@ -50,6 +50,8 @@ const corsOptions = {
     'https://cholesterintipps.de',
     'https://dev.nice-advice.info',
     'https://www.dev.nice-advice.info',
+    'https://hairstylesforseniors.com',
+    'https://www.hairstylesforseniors.com',
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -813,6 +815,116 @@ server.post('/track-click', async (req, res) => {
   } catch (err) {
     console.error('❌ Click tracking error:', err);
     res.status(200).json({ ok: true }); // Always return 200 to not break UX
+  }
+});
+
+// ─── Site → Strapi collection mapping ───────────────────────────────────────
+// `site` identifier sent by the client  →  Strapi REST collection name
+const SITE_TO_COLLECTION = {
+  'nice-advice':   'posts',    // Post  (nice-advice.info)
+  'hairstyles':    'post3s',   // Post3 (hairstylesforseniors.com)
+  'cholesterin':   'post2s',   // Post2 (cholesterintipps.de)
+};
+
+// Fallback: detect collection from the request Origin header
+function collectionFromOrigin(origin = '') {
+  if (origin.includes('cholesterintipps.de'))       return 'post2s';
+  if (origin.includes('hairstylesforseniors.com'))   return 'post3s';
+  return 'posts'; // nice-advice.info is the default
+}
+
+/**
+ * POST /comment
+ * Body: { postId: string, username: string, text: string, site?: string }
+ *   postId   – documentId of the post in Strapi
+ *   username – commenter display name
+ *   text     – comment body
+ *   site     – optional explicit identifier: 'nice-advice' | 'hairstyles' | 'cholesterin'
+ *              Falls back to Origin header detection if omitted.
+ */
+server.post('/comment', async (req, res) => {
+  try {
+    const { postId, username, text, site } = req.body;
+
+    if (!postId || !username || !text) {
+      return res.status(400).json({ error: 'postId, username and text are required' });
+    }
+
+    if (username.trim().length < 1 || username.trim().length > 100) {
+      return res.status(400).json({ error: 'username must be between 1 and 100 characters' });
+    }
+
+    if (text.trim().length < 1 || text.trim().length > 2000) {
+      return res.status(400).json({ error: 'text must be between 1 and 2000 characters' });
+    }
+
+    // Resolve which Strapi collection to use
+    const origin = req.get('origin') || '';
+    const collection = (site && SITE_TO_COLLECTION[site])
+      ? SITE_TO_COLLECTION[site]
+      : collectionFromOrigin(origin);
+
+    console.log(`💬 New comment for ${collection} postId=${postId} site=${site || origin}`);
+
+    // 1. Fetch the current post to get its existing comments
+    const getRes = await fetch(
+      `${STRAPI_API_URL}/api/${collection}/${postId}?populate=comments`,
+      {
+        headers: { Authorization: STRAPI_TOKEN },
+      }
+    );
+
+    if (getRes.status === 404) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    if (!getRes.ok) {
+      const errText = await getRes.text();
+      throw new Error(`Strapi GET error ${getRes.status}: ${errText}`);
+    }
+
+    const postData = await getRes.json();
+    const existingComments = postData?.data?.comments ?? [];
+
+    // 2. Build the updated comments array (keep existing + append new one)
+    const newComment = {
+      username: username.trim(),
+      text: text.trim(),
+    };
+
+    const updatedComments = [
+      ...existingComments.map(c => ({ username: c.username, text: c.text })),
+      newComment,
+    ];
+
+    // 3. PUT the updated comments back to Strapi
+    const putRes = await fetch(
+      `${STRAPI_API_URL}/api/${collection}/${postId}`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: STRAPI_TOKEN,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ data: { comments: updatedComments } }),
+      }
+    );
+
+    if (!putRes.ok) {
+      const errText = await putRes.text();
+      throw new Error(`Strapi PUT error ${putRes.status}: ${errText}`);
+    }
+
+    const updatedPost = await putRes.json();
+
+    // Return only the saved comment so the client can append it immediately
+    res.status(201).json({
+      success: true,
+      comment: newComment,
+      totalComments: updatedPost?.data?.comments?.length ?? updatedComments.length,
+    });
+  } catch (err) {
+    console.error('❌ /comment error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
