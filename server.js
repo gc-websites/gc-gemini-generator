@@ -46,6 +46,7 @@ const corsOptions = {
   origin: [
     'https://nice-advice.info',
     'https://www.nice-advice.info',
+    'http://localhost:3000',
     'http://localhost:5173',
     'https://cholesterintipps.de',
     'https://www.cholesterintipps.de',
