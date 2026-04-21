@@ -949,12 +949,14 @@ server.post('/comment', async (req, res) => {
     const newComment = {
       username: username.trim(),
       text: text.trim(),
+      createdAt: new Date().toISOString(),
     };
 
     const updatedComments = [
       ...existingComments.map(c => ({
         username: c.username,
         text: c.text,
+        ...(c.createdAt ? { createdAt: c.createdAt } : {}),
       })),
       newComment,
     ];
