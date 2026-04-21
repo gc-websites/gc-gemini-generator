@@ -893,7 +893,11 @@ server.post('/comment', async (req, res) => {
     };
 
     const updatedComments = [
-      ...existingComments.map(c => ({ username: c.username, text: c.text })),
+      ...existingComments.map(c => ({
+        ...(c.id ? { id: c.id } : {}),
+        username: c.username,
+        text: c.text,
+      })),
       newComment,
     ];
 
