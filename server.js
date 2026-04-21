@@ -820,6 +820,55 @@ server.post('/track-click', async (req, res) => {
   }
 });
 
+// ─── Comment moderation via OpenAI ─────────────────────────────────────────
+/**
+ * Sends the comment text to GPT-4o-mini for moderation.
+ * Returns { allowed: true } or { allowed: false, reason: string }.
+ */
+async function moderateComment(text) {
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a comment moderation assistant. '
+              + 'Analyze the user comment for profanity, hate speech, threats, spam, '
+              + 'sexual content, or any other inappropriate material. '
+              + 'Reply ONLY with valid JSON in this exact format: '
+              + '{"allowed":true} if the comment is acceptable, '
+              + 'or {"allowed":false,"reason":"short English reason"} if it is not. '
+              + 'No extra text, no markdown.',
+          },
+          { role: 'user', content: text },
+        ],
+        max_tokens: 60,
+        temperature: 0,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn('⚠️ OpenAI moderation API error:', response.status);
+      return { allowed: true }; // fail-open: don't block if OpenAI is down
+    }
+
+    const data = await response.json();
+    const raw = data.choices?.[0]?.message?.content?.trim() ?? '{"allowed":true}';
+    const result = JSON.parse(raw);
+    return result;
+  } catch (err) {
+    console.warn('⚠️ moderateComment error (fail-open):', err.message);
+    return { allowed: true }; // fail-open
+  }
+}
+
 // ─── Site → Strapi collection mapping ───────────────────────────────────────
 // `site` identifier sent by the client  →  Strapi REST collection name
 const SITE_TO_COLLECTION = {
@@ -867,6 +916,15 @@ server.post('/comment', async (req, res) => {
       : collectionFromOrigin(origin);
 
     console.log(`💬 New comment for ${collection} postId=${postId} site=${site || origin}`);
+
+    // 0. Moderate the comment with ChatGPT before saving
+    const moderation = await moderateComment(text.trim());
+    if (!moderation.allowed) {
+      console.log(`🚫 Comment rejected by moderation. Reason: ${moderation.reason}`);
+      return res.status(422).json({
+        error: `Your comment was not allowed: ${moderation.reason || 'it contains inappropriate content'}.`,
+      });
+    }
 
     // 1. Fetch the current post to get its existing comments
     const getRes = await fetch(
