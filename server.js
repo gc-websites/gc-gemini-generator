@@ -19,6 +19,7 @@ import { applyCommissionsToPurchases, attachOrdersToLeads, createPurchasesToStra
 import { generateCommonTitle, generateProductsArray, postMultiproductToStrapi } from './functionsForMultiproducts.js';
 import { checkSitesAvailability } from './siteChecker.js';
 import { runAmazonCCApproval } from './functionsForAmazonCC.js';
+import { runAutoCommenter, formatReportForTelegram } from './autoCommenter.js';
 const server = express();
 const PORT = process.env.PORT || 4000;
 dotenv.config();
@@ -154,6 +155,55 @@ cron.schedule('30 9 * * *', async () => {
   }
 }, {
   timezone: 'Europe/Kiev'
+});
+
+// ─── Auto-commenter: every 2 hours, comment on the 10 freshest posts of each site ───
+let isAutoCommenterRunning = false;
+async function runAutoCommenterJob({ trigger = 'cron' } = {}) {
+  if (isAutoCommenterRunning) {
+    console.log('[autoCommenter] already running — skipping this run.');
+    return { skipped: true };
+  }
+  isAutoCommenterRunning = true;
+  try {
+    console.log(`[autoCommenter] start (${trigger}):`, new Date().toISOString());
+    const report = await runAutoCommenter({ postsPerSite: 10 });
+    console.log(`[autoCommenter] done: posted=${report.totalPosted} errors=${report.totalErrors} in ${report.durationSec}s`);
+    try {
+      await bot.sendMessage(ADMIN_CHAT_ID, formatReportForTelegram(report), {
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true,
+      });
+    } catch (tgErr) {
+      console.warn('[autoCommenter] telegram notify failed:', tgErr.message);
+    }
+    return report;
+  } catch (err) {
+    console.error('[autoCommenter] fatal:', err);
+    try {
+      await bot.sendMessage(ADMIN_CHAT_ID, `❌ Auto-commenter failed: ${err.message}`);
+    } catch (_) { /* ignore */ }
+    throw err;
+  } finally {
+    isAutoCommenterRunning = false;
+  }
+}
+
+cron.schedule('0 */2 * * *', () => {
+  runAutoCommenterJob({ trigger: 'cron' }).catch(err =>
+    console.error('[autoCommenter] cron error:', err.message)
+  );
+}, {
+  timezone: 'Europe/Kiev'
+});
+
+server.post('/test-auto-comment', async (req, res) => {
+  try {
+    const report = await runAutoCommenterJob({ trigger: 'manual' });
+    res.json({ success: true, report });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 server.get('/test-check-sites', async (req, res) => {
