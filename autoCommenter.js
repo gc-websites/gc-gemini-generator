@@ -86,7 +86,8 @@ async function fetchLatestPosts(collection, limit = 10) {
     + `&fields%5B0%5D=title`
     + `&fields%5B1%5D=description`
     + `&fields%5B2%5D=documentId`
-    + `&fields%5B3%5D=createdAt`;
+    + `&fields%5B3%5D=createdAt`
+    + `&fields%5B4%5D=publishedAt`;
 
   const res = await fetch(url, {
     headers: { Authorization: STRAPI_TOKEN },
@@ -149,13 +150,18 @@ async function appendCommentToPost(collection, post, comment) {
 
   const updated = [...existing, comment];
 
+  // ВАЖНО: явно возвращаем оригинальный publishedAt, иначе Strapi v5 при PUT
+  // ставит его в "сейчас" и ломает любую сортировку по publishedAt на фронте.
+  const body = { data: { comments: updated } };
+  if (post.publishedAt) body.data.publishedAt = post.publishedAt;
+
   const res = await fetch(`${STRAPI_API_URL}/api/${collection}/${post.documentId}`, {
     method: 'PUT',
     headers: {
       Authorization: STRAPI_TOKEN,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ data: { comments: updated } }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
