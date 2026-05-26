@@ -1,346 +1,92 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GoogleGenAI } from "@google/genai";
-import fetch from "node-fetch";
-import FormData from "form-data";
-import dotenv from 'dotenv';
+// hairstylesforseniors.com — English-language hair care, hairstyles,
+// color and confidence for adults 50+. Voice is warm and friendly,
+// like a hairdresser who's been cutting your hair for 20 years.
 
-dotenv.config();
+import { generateAndPostForSite } from './functionsPostBase.js';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const STRAPI_TOKEN = process.env.STRAPI_TOKEN;
-const STRAPI_API_URL = process.env.STRAPI_API_URL;
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-const ai = new GoogleGenAI(GEMINI_API_KEY);
+const hairStylesConfig = {
+  brandName: 'HairStylesForSeniors',
+  language: 'English',
+  audience:
+    'English-speaking adults aged 50–75 (more women than men, but write inclusively) interested in age-appropriate hairstyles, gentle hair care, gray coverage, hair thinning, products and confidence tips',
+  brandVoice:
+    'warm, friendly, hairdresser-who-knows-you tone. Plain, encouraging language. Real-life examples ("a client I had last week…"). Never condescending about aging — celebrates it. No pressure to look younger; the goal is to look like the best version of yourself.',
+  topicHint:
+    'Write the kind of article a 60-year-old reader would read with her morning coffee and forward to a friend. Specific, sensory details (the smell of a salon, the texture of fine hair, the weight of a good brush). Mention real techniques, not just generic "use good products" advice.',
+  disclaimerHint:
+    'When the topic touches scalp conditions, medication side effects or significant hair loss, briefly note that a dermatologist is the right next step — keep it warm and one sentence.',
 
-const categories = [
-  'Women’s Hairstyles for Seniors',
-  'Men’s Hairstyles for Seniors',
-  'Hair Care for Seniors',
-  'Special Occasion Hairstyles for Seniors',
-  'Hair Styling Tutorials for Seniors',
-  'Hair Tools & Products for Seniors',
-  'Hair Problems & Solutions for Seniors',
-  'Inspiration & Gallery for Seniors',
-  'Reviews & Recommendations for Seniors'
-];
+  collection: 'post3s',
+  authorField: 'author_3',
+  categoryField: 'category_3',
+  defaultAuthor: 1,
 
-const generateQuery = async () => {
-  try{
-    const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-    const prompt = `Come up with an interesting topic for a post in the category ${randomCategory}. In the response, I want a simple subject line consisting of a few words. There's no need to explain anything or write anything before or after the subject line. So, the response should just be the subject line, one line.`;
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const result = await model.generateContent(prompt);
-    const cleanRes = result.response.text().trim();
-    if(randomCategory === 'Women’s Hairstyles for Seniors'){
-      return {query: cleanRes, categoryId: 1}
-    }else if(randomCategory === 'Men’s Hairstyles for Seniors'){
-      return {query: cleanRes, categoryId: 3}
-    }else if(randomCategory === 'Hair Care for Seniors'){
-      return {query: cleanRes, categoryId: 5}
-    }else if(randomCategory === 'Special Occasion Hairstyles for Seniors'){
-      return {query: cleanRes, categoryId: 7}
-    }else if(randomCategory === 'Hair Styling Tutorials for Seniors'){
-      return {query: cleanRes, categoryId: 9}
-    }else if(randomCategory === 'Hair Tools & Products for Seniors'){
-      return {query: cleanRes, categoryId: 11}
-    }else if(randomCategory === 'Hair Problems & Solutions for Seniors'){
-      return {query: cleanRes, categoryId: 13}
-    }else if(randomCategory === 'Inspiration & Gallery for Seniors'){
-      return {query: cleanRes, categoryId: 15}
-    }else{
-      return {query: cleanRes, categoryId: 17}
-    }
-  }
-  catch (error) {
-    console.error(error);
-    return {error: 'Ошибка при генерации Темы'};
-  }
-}
+  categories: [
+    "Women's Hairstyles for Seniors",
+    "Men's Hairstyles for Seniors",
+    'Hair Care for Seniors',
+    'Special Occasion Hairstyles for Seniors',
+    'Hair Styling Tutorials for Seniors',
+    'Hair Tools & Products for Seniors',
+    'Hair Problems & Solutions for Seniors',
+    'Inspiration & Gallery for Seniors',
+    'Reviews & Recommendations for Seniors',
+  ],
+  categoryIds: {
+    "Women's Hairstyles for Seniors": 1,
+    "Men's Hairstyles for Seniors": 3,
+    'Hair Care for Seniors': 5,
+    'Special Occasion Hairstyles for Seniors': 7,
+    'Hair Styling Tutorials for Seniors': 9,
+    'Hair Tools & Products for Seniors': 11,
+    'Hair Problems & Solutions for Seniors': 13,
+    'Inspiration & Gallery for Seniors': 15,
+    'Reviews & Recommendations for Seniors': 17,
+  },
 
-const generateGlobalObj = async (query, categoryId, category) => {
-  const globalObj = {
-    title: '',
-    description: [
-      {
-        type: 'paragraph',
-        children: [
-          {
-            type: 'text',
-            text: ''
-          }
-        ]}
-    ],
-    isPopular: false,
-    paragraphs: [
-      {
-        subtitle: '',
-        description: [
-          {
-            type: 'paragraph',
-            children: [
-              {
-                type: 'text',
-                text: ''
-              }
-            ]
-          }
-        ],
-        ads: [
-          {title: 'Example adds title', url: ''},
-          {title: 'Example adds title', url: ''}
-        ],
-        image: undefined
-      },
-      {
-        subtitle: '',
-        description: [
-          {
-            type: 'paragraph',
-            children: [
-              {
-                type: 'text',
-                text: ''
-              }
-            ]
-          }
-        ],
-        ads: [
-          {title: 'Example adds title', url: 'https://example.com'},
-          {title: 'Example adds title', url: 'https://example.com'}
-        ],
-        image: undefined
-      }
-    ],
-    ads: [
-      {title: 'Example adds title', url: 'https://example.com'},
-      {title: 'Example adds title', url: 'https://example.com'},
-      {title: 'Example adds title', url: 'https://example.com'}
-    ],
-    firstAdBanner: {
-      url: 'https://example.com',
-      image: undefined
-    },
-    secondAdBanner: {
-      url: 'https://example.com',
-      image: undefined
-    },
-    author_3: 1,
-    category_3: categoryId,
-    image: undefined
-  }
+  imagePrefix: 'hairstyles',
 
-  let title = undefined;
-  let description = undefined;
-  let subTitleP1 = undefined;
-  let descrP1 = undefined;
-  let subTitleP2 = undefined;
-  let descrP2 = undefined;
+  // Visual identity — older adults in real life. Salons, mirrors,
+  // products, soft natural lighting. NEVER overly youthful.
+  imageStyle: {
+    context:
+      'HairStylesForSeniors.com is a friendly hair-care site for adults 50+. Photography style: soft editorial, real seniors (NEVER models under 50 in lead roles), salons, real bathrooms, real living rooms.',
+    palette:
+      'warm neutrals, soft champagne and rose, gentle silver highlights, muted lavender accents. Natural daylight, no harsh shadows. Hair textures (silver, salt-and-pepper, soft gray, brunette streaked with white) should look elegant, not aged-into.',
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-  try{
-    const resTitle = await model.generateContent(`Come up with an interesting title for my post on the topic ${query}. The title should be approximately 45-70 characters long. In your reply, write absolutely nothing except the title. Don't write anything at the beginning or end of your reply. Just give me the result as the title. Don't give a truncated answer; the title needs to be full and complete.`);
-    title = resTitle.response.text().trim();
-  }catch(e){
-    console.log(`Ошибка при генерации заголовка поста: ${e}`);
-    return false;
-  }
-  try{
-    const resDescription = await model.generateContent(`Create a description for my post. It must contain at least 700 characters. This is the category in which this post will be located on my website ${category}. This is the topic of the post that needs to be taken into account when creating the description ${query}. In your reply, write absolutely nothing except the description. Don't write anything at the beginning or end of your reply.`);
-    description = resDescription.response.text().trim();
-  }catch(e){
-    console.log(`Ошибка при создании описания поста: ${e}`)
-    return false;
-  }
-  try{
-    const resSubTitleP1 = await model.generateContent(`Write a title for a paragraph of my article. In your response, don't include anything other than the title itself. Don't add anything at the beginning or end of your response; just write the title. It should be 45-75 characters long and make sense. When creating the title, consider the category the article is in - ${category}, Also consider the topic of the article - ${query}. When creating a title, take into account the description of my article - ${description}.`);
-    subTitleP1 = resSubTitleP1.response.text().trim();
-  }catch(e){
-    console.log(`Ошибка при создании первого подзаголовка поста: ${e}`)
-    return false;
-  }
-  try{
-    const resDescrP1 = await model.generateContent(`Create a paragraph for my article on the website. In your response, write nothing but the paragraph itself. Don't add anything before or after the paragraph. Your response should only include the paragraph itself. Here's the category the paragraph is in - ${category}. This is the topic of my article - ${query}. Here is the description of my article - ${description}. And here is the heading for the paragraph you need to create - ${subTitleP1}. The length of a paragraph must be no less than 700 characters.`);
-    descrP1 = resDescrP1.response.text().trim();
-  }catch(e){
-    console.log(`Ошибка при создании первого параграфа поста: ${e}`);
-    return false;
-  }
-  try{
-    const resSubTitleP2 = await model.generateContent(`Write a title for a paragraph of my article. In your response, don't include anything other than the title itself. Don't add anything at the beginning or end of your response; just write the title. It should be 45-75 characters long and make sense. When creating the title, consider the category the article is in - ${category}, Also consider the topic of the article - ${query}. When creating a title, take into account the description of my article - ${description}.`);
-    subTitleP2 = resSubTitleP2.response.text().trim();
-  }catch(e){
-    console.log(`Ошибка при создании второго подзаголовка поста: ${e}`)
-    return false;
-  }
-  try{
-    const resDescrP2 = await model.generateContent(`Create a paragraph for my article on the website. In your response, write nothing but the paragraph itself. Don't add anything before or after the paragraph. Your response should only include the paragraph itself. Here's the category the paragraph is in - ${category}. This is the topic of my article - ${query}. Here is the description of my article - ${description}. And here is the heading for the paragraph you need to create - ${subTitleP2}. The length of a paragraph must be no less than 700 characters.`);
-    descrP2 = resDescrP2.response.text().trim();
-  }catch(e){
-    console.log(`Ошибка при создании второго параграфа  поста: ${e}`);
-    return false;
-  }
+    subjectClose:
+      'close-up of a hair-related detail: silver hair being combed, hands applying conditioner, a wide-tooth wooden comb on a marble counter, fingertips at the temples, a single curl held between fingers.',
+    settingClose:
+      'a real bathroom counter, a vanity mirror, a salon station, or a kitchen window with morning light. Lived-in textures.',
+    moodClose: 'intimate, gentle, almost meditative.',
 
-  if(title && description && subTitleP1 && descrP1 && subTitleP2 && descrP2){
-    globalObj.title = title;
-    globalObj.description[0].children[0].text = description;
-    globalObj.paragraphs[0].subtitle = subTitleP1;
-    globalObj.paragraphs[0].description[0].children[0].text = descrP1;
-    globalObj.paragraphs[1].subtitle = subTitleP2;
-    globalObj.paragraphs[1].description[0].children[0].text = descrP2;
-  }else{
-    console.log('Ошибка генерации главного обьекта');
-    return false;
-  }
+    subjectAction:
+      'a woman or man aged 55–75 doing something hair-related at home or in a salon: a stylist trimming silver hair, a senior styling her own hair at a mirror, a man checking his beard line, hands separating sections of hair.',
+    settingAction:
+      'a warm modern salon, a sunlit bathroom, a comfortable bedroom vanity, or a porch with a hand-mirror. Real chairs, real towels, real products on shelves.',
+    moodAction: 'confident, relaxed, present.',
 
-  return globalObj;
-}
+    subjectHero:
+      'a striking portrait or scene of an adult 55–75 with beautiful natural-age hair — silver, salt-and-pepper, soft gray, or warm-toned dyed hair. The person looks grounded and self-possessed, NOT trying to look younger.',
+    settingHero:
+      'a salon chair with magazine-cover styling, a sunlit window, a quiet living room, or a portrait against a soft neutral background. The hair must be the visual anchor.',
+    moodHero:
+      'aspirational but real. The kind of image a 60-year-old looks at and thinks "that could be me, on a good day."',
 
-const generateImages = async (globalObj) => {
-  const basePrompt = `
-Create an ultra-realistic photograph for a website article.
-The image must look like a real photo taken with a DSLR camera.
-No illustration, no CGI, no fantasy, no magic, no fictional objects.
-Natural lighting, real people, real environments, realistic everyday situations.
-`;
+    subjectProduct:
+      'still life of hair-care items: a wooden brush on a marble counter, a row of shampoo bottles (no readable brand text), a curling iron warming up, fresh towels and a comb, dry rose petals beside a bottle of hair oil.',
+    settingProduct:
+      'flat lay or 3/4 angle on stone, linen or polished wood. Soft, even light. Composition that could live as a sidebar.',
 
-  const prompts = [
-    `${basePrompt}
-Article title: ${globalObj.title}
-Article description: ${globalObj.description[0].children[0].text}
-Paragraph: ${globalObj.paragraphs[0].description[0].children[0].text}
-`,
-
-    `${basePrompt}
-Article title: ${globalObj.title}
-Article description: ${globalObj.description[0].children[0].text}
-Paragraph: ${globalObj.paragraphs[1].description[0].children[0].text}
-`,
-
-    `${basePrompt}
-Article title: ${globalObj.title}
-Article description: ${globalObj.description[0].children[0].text}
-`,
-
-    `${basePrompt}
-Article title: ${globalObj.title}
-Article description: ${globalObj.description[0].children[0].text}
-First paragraph: ${globalObj.paragraphs[0].description[0].children[0].text}
-Second paragraph: ${globalObj.paragraphs[1].description[0].children[0].text}
-`,
-
-    `${basePrompt}
-Article title: ${globalObj.title}
-Article description: ${globalObj.description[0].children[0].text}
-First paragraph: ${globalObj.paragraphs[0].description[0].children[0].text}
-Second paragraph: ${globalObj.paragraphs[1].description[0].children[0].text}
-`
-  ];
-
-  const ids = [];
-
-  for (let i = 0; i < prompts.length; i++) {
-    try {
-      const response = await ai.models.generateImages({
-        model: "imagen-4.0-generate-001",
-        prompt: prompts[i],
-        config: {
-          numberOfImages: 1,
-          aspectRatio: "1:1",
-          outputMimeType: "image/png",
-        },
-      });
-
-      const generated = response.generatedImages?.[0];
-      if (!generated?.image?.imageBytes) {
-        console.warn(`⚠️ No image data for image ${i + 1}`, response);
-        continue;
-      }
-
-      const buffer = Buffer.from(
-        generated.image.imageBytes,
-        "base64"
-      );
-
-      const formData = new FormData();
-      formData.append("files", buffer, {
-        filename: `imagen-article-${i + 1}.png`,
-        contentType: "image/png",
-      });
-
-      const uploadRes = await fetch(`${STRAPI_API_URL}/api/upload`, {
-        method: "POST",
-        headers: {
-          Authorization: STRAPI_TOKEN,
-        },
-        body: formData,
-      });
-
-      const result = await uploadRes.json();
-
-      if (Array.isArray(result) && result[0]?.id) {
-        ids.push(result[0].id);
-        console.log(`✅ Uploaded image ${i + 1} to Strapi: id=${result[0].id}`);
-      } else {
-        console.warn(`⚠️ No id found for image ${i + 1}`, result);
-      }
-    } catch (err) {
-      console.error(`❌ Error generating image ${i + 1}`, err);
-    }
-  }
-
-  return ids;
+    subjectLifestyle:
+      'a candid mid-shot of an adult 55–75 in a relaxed lifestyle moment — laughing with a friend, looking out a window, walking with a small dog, having coffee with a granddaughter — where the hair is visible but not the only subject.',
+    settingLifestyle:
+      'real home, café, park or city street. Hair clearly visible, lighting flattering. Distinctly different feel from the product still life.',
+  },
 };
 
-
-const prepForPush = async (ids, obj) => {
-  const editedObj = obj;
-  editedObj.paragraphs[0].image = ids[0];
-  editedObj.paragraphs[1].image = ids[1];
-  editedObj.image = ids[2];
-  editedObj.firstAdBanner.image = ids[3];
-  editedObj.secondAdBanner.image = ids[4];
-
-  return editedObj;
+export async function generateAndPostHairStyles() {
+  return generateAndPostForSite(hairStylesConfig);
 }
 
-const strapiPost = async (obj) => {
-  try {
-    console.log(obj);
-      const strapiRes = await fetch(`${STRAPI_API_URL}/api/post3s`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: STRAPI_TOKEN,
-        },
-        body: JSON.stringify({ data: obj }),
-      })
-      if (!strapiRes.ok) {
-        const err = await strapiRes.text()
-        throw new Error(err)
-      }
-      return strapiRes.json();
-    } catch (err) {
-      console.error('❌ Create-post error:', err)
-      return err.message;
-    }
-}
-
-const generateAndPostHairStyles = async () => {
-  try {
-      const { query, categoryId, category } = await generateQuery();
-      console.log('Тема згенерована');
-      const globalObj = await generateGlobalObj(query, categoryId, category);
-      console.log('Глобальний обєкт згенеровано');
-      const imageIds = await generateImages(globalObj);
-      console.log('картинки завантажено');
-      const prepForPushRes = await prepForPush(imageIds, globalObj);
-      console.log('обєкт змінено')
-      const isPostedToStrapi = await strapiPost(prepForPushRes);
-      return isPostedToStrapi;
-    } catch (error) {
-      console.error('Ошибка в generateAndPost:', error);
-      throw error;
-    }
-}
-
-export {generateGlobalObj, generateImages, generateQuery, prepForPush, strapiPost, generateAndPostHairStyles};
+export { hairStylesConfig };

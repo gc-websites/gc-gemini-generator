@@ -1,25 +1,20 @@
 import express from 'express';
-import { Mutex } from 'async-mutex';
-
 import cors from 'cors';
 import dotenv from 'dotenv';
-import crypto from "crypto";
 import cron from 'node-cron';
-import { generateAndPost, postUserEmail } from './functions.js';
-import { generateImg, generateProduct, generateRefLink, getTag, getTags, leadPushStrapi, postToStrapi, resetOldTags, updateTagFbclid, updateTagStatus, claimTag } from './functionsForProducts.js';
+import requestIp from 'request-ip';
 
+import { generateAndPost, postUserEmail } from './functions.js';
+import { generateImg, generateProduct, postToStrapi } from './functionsForProducts.js';
 import { generateAndPostCholesterin } from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
-import { tagCreator } from './tagCreator.js';
-import { createTelegramBot } from "./tgBot.js";
-import requestIp from 'request-ip';
-import { LRUCache } from 'lru-cache'; // <-- Added LRUCache import
-import { ParseAmazonOrders } from './playwright/getEarningsData.js';
-import { applyCommissionsToPurchases, attachOrdersToLeads, createPurchasesToStrapi, filterNewPurchases, getAmznComissionsFromStrapi, getLeadsFromStrapi, getPurchasesFromStrapiLast24h, getUnusedPurchasesFromStrapi, postPurchasesToStrapi, sendPurchasesToFacebookAndMarkUsed, sendLeadToFacebook } from './functionsForTracking.js';
+import { createTelegramBot } from './tgBot.js';
 import { generateCommonTitle, generateProductsArray, postMultiproductToStrapi } from './functionsForMultiproducts.js';
 import { checkSitesAvailability } from './siteChecker.js';
-import { runAmazonCCApproval } from './functionsForAmazonCC.js';
 import { runAutoCommenter, formatReportForTelegram } from './autoCommenter.js';
+import { attachForumRoutes } from './forumRoutes.js';
+import { seedPersonas, genThreadSafe, genReplySafe, seedForum, seedForumQuick, fillRepliesOnExistingThreads, fillCannedReplies, fillCannedThreads } from './functionsForum.js';
+
 const server = express();
 const PORT = process.env.PORT || 4000;
 dotenv.config();
@@ -29,19 +24,6 @@ const STRAPI_TOKEN = process.env.STRAPI_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const TG_TOKEN = process.env.TG_TOKEN;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
-const TG_BOT_ORDERS_ID = process.env.TG_BOT_ORDERS_ID;
-const PIXEL_ID = process.env.PIXEL_ID;
-const PIXEL_TOKEN = process.env.PIXEL_TOKEN;
-
-const tagMutex = new Mutex();
-
-// LRUCache automatically deletes items older than `ttl` (Time To Live), 
-// so we don't need manual setTimeouts that cause memory leaks.
-// It also caps the max number of items to prevent out-of-memory errors.
-const recentLeads = new LRUCache({
-  max: 10000,          // Maximum 10,000 items in cache
-  ttl: 1000 * 60 * 60, // Items live for 1 hour (3600000 ms)
-});
 
 const corsOptions = {
   origin: [
@@ -49,6 +31,9 @@ const corsOptions = {
     'https://www.nice-advice.info',
     'http://localhost:3000',
     'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:5175',
+    'http://localhost:4173',
     'https://cholesterintipps.de',
     'https://www.cholesterintipps.de',
     'https://dev.nice-advice.info',
@@ -63,6 +48,8 @@ const corsOptions = {
 server.use(express.json());
 server.use(cors(corsOptions));
 server.set('trust proxy', true);
+
+attachForumRoutes(server);
 
 const bot = createTelegramBot(TG_TOKEN);
 
@@ -189,12 +176,161 @@ async function runAutoCommenterJob({ trigger = 'cron' } = {}) {
   }
 }
 
-cron.schedule('0 */2 * * *', () => {
+// Once a day at 11:00 Kyiv time. Each run leaves ~1 new comment on each of
+// the freshest posts per site — daily cadence keeps engagement looking
+// organic without spamming posts or burning through Gemini quota.
+cron.schedule('0 11 * * *', () => {
   runAutoCommenterJob({ trigger: 'cron' }).catch(err =>
     console.error('[autoCommenter] cron error:', err.message)
   );
 }, {
   timezone: 'Europe/Kiev'
+});
+
+// ─── Forum bot generators ─────────────────────────────────────────────────
+// Two threads/day (10:00 and 19:00 ET) + ~10 replies/day distributed.
+let isForumThreadRunning = false;
+async function runForumThread() {
+  if (isForumThreadRunning) {
+    console.log('[forum-cron] genThread already running — skip.');
+    return;
+  }
+  isForumThreadRunning = true;
+  try {
+    const result = await genThreadSafe({ site: 'hairstyles' });
+    if (result?.title) {
+      console.log(`[forum-cron] thread created: ${result.title}`);
+    }
+  } finally {
+    isForumThreadRunning = false;
+  }
+}
+
+let isForumReplyRunning = false;
+async function runForumReply() {
+  if (isForumReplyRunning) {
+    console.log('[forum-cron] genReply already running — skip.');
+    return;
+  }
+  isForumReplyRunning = true;
+  try {
+    await genReplySafe({ site: 'hairstyles' });
+  } finally {
+    isForumReplyRunning = false;
+  }
+}
+
+// New forum threads — 10:00 and 19:00 America/New_York (2/day).
+cron.schedule('0 10,19 * * *', () => {
+  runForumThread().catch(err => console.error('[forum-cron] thread error:', err.message));
+}, {
+  timezone: 'America/New_York',
+});
+
+// Forum replies — every 6 hours (4/day). genReply is idempotent and only
+// fires when a thread is older than 8h with <12 comments, so this won't
+// over-populate threads even though the cron ticks 4 times.
+cron.schedule('15 */6 * * *', () => {
+  runForumReply().catch(err => console.error('[forum-cron] reply error:', err.message));
+}, {
+  timezone: 'America/New_York',
+});
+
+// Admin / manual endpoints — handy for first-run seeding and ops.
+server.post('/forum-admin/seed-personas', async (req, res) => {
+  try {
+    const { count, site } = req.body || {};
+    const result = await seedPersonas({
+      count: Number(count) || 20,
+      site: site || 'hairstyles',
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[forum-admin] seedPersonas error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+server.post('/forum-admin/gen-thread', async (req, res) => {
+  try {
+    const out = await genThreadSafe({ site: req.body?.site || 'hairstyles' });
+    res.json({ success: !!out, data: out });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+server.post('/forum-admin/gen-reply', async (req, res) => {
+  try {
+    const out = await genReplySafe({ site: req.body?.site || 'hairstyles' });
+    res.json({ success: !!out, data: out });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+server.post('/forum-admin/seed-all', async (req, res) => {
+  try {
+    const result = await seedForum({
+      personasCount: Number(req.body?.personasCount) || 8,
+      threadsCount: Number(req.body?.threadsCount) || 5,
+      repliesPerThread: Number(req.body?.repliesPerThread) || 3,
+      site: req.body?.site || 'hairstyles',
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+server.post('/forum-admin/seed-quick', async (req, res) => {
+  try {
+    const result = await seedForumQuick({
+      threadsCount: Number(req.body?.threadsCount) || 5,
+      repliesPerThread: Number(req.body?.repliesPerThread) || 3,
+      site: req.body?.site || 'hairstyles',
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+server.post('/forum-admin/fill-replies', async (req, res) => {
+  try {
+    const result = await fillRepliesOnExistingThreads({
+      maxThreads: Number(req.body?.maxThreads) || 6,
+      repliesPerThread: Number(req.body?.repliesPerThread) || 3,
+      maxComments: Number(req.body?.maxComments) || 4,
+      site: req.body?.site || 'hairstyles',
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+server.post('/forum-admin/canned-threads', async (req, res) => {
+  try {
+    const result = await fillCannedThreads({ site: req.body?.site || 'hairstyles' });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+server.post('/forum-admin/canned-replies', async (req, res) => {
+  try {
+    const result = await fillCannedReplies({
+      maxThreads: Number(req.body?.maxThreads) || 8,
+      repliesPerThread: Number(req.body?.repliesPerThread) || 3,
+      maxComments: Number(req.body?.maxComments) || 4,
+      site: req.body?.site || 'hairstyles',
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 server.post('/test-auto-comment', async (req, res) => {
@@ -424,19 +560,6 @@ server.get('/get-multiproduct/:id', async (req, res) => {
   }
 });
 
-/* server.post('/fbclid', async (req, res) => {
-  const { fbclid, productId, tag } = req.body;
-  const tagFromStrapi = await getTag(tag);
-  const tagId = tagFromStrapi.documentId
-  if (tagFromStrapi.fbclid) {
-    res.status(200).send(true);
-  }
-  else {
-    const result = await updateTagFbclid(fbclid, productId, tag, tagId);
-    res.json(result);
-  }
-}) */
-
 server.post('/email', async (req, res) => {
   const { email, source } = req.body;
   if (!email || !source) {
@@ -455,225 +578,6 @@ server.post('/email', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-/* server.post('/get-trackingId', async (req, res) => {
-  const { country } = req.body;
-  const tagFromStrapi = await getTag(country);
-  res.json(tagFromStrapi);
-}) */
-
-/* server.post("/lead", async (req, res) => {
-  try {
-    const {
-      fbp,
-      fbc,
-      productId,
-      clickDate,
-      tz,
-      ip_address,
-      user_agent,
-      trackingId,
-      trackingDocId,
-      country,
-      external_id,
-      gclid,
-      wbraid,
-      gbraid,
-      campaign_id,
-      event_source_url
-    } = req.body;
-    const ip = requestIp.getClientIp(req);
-    const userAgent = req.get('user-agent');
-
-    // Используем Mutex для атомарного присвоения тега
-    const release = await tagMutex.acquire();
-    try {
-      // Дедупликация: проверяем по fbp, fbc и ip отдельно
-      const now = Date.now();
-      const cacheKeyIp = `ip_${ip}_${productId}`;
-      const cacheKeyFbp = fbp ? `fbp_${fbp}_${productId}` : null;
-      const cacheKeyFbc = fbc ? `fbc_${fbc}_${productId}` : null;
-
-      const cachedIp = recentLeads.get(cacheKeyIp);
-      const cachedFbp = cacheKeyFbp ? recentLeads.get(cacheKeyFbp) : null;
-      const cachedFbc = cacheKeyFbc ? recentLeads.get(cacheKeyFbc) : null;
-
-      const cached = cachedIp || cachedFbp || cachedFbc;
-
-      if (cached) {
-        console.log(`♻️ Duplicate lead intercepted for IP: ${ip}, fbp: ${fbp || 'none'}`);
-        return res.json({
-          success: true,
-          trackingId: cached.trackingId,
-          trackingDocId: cached.trackingDocId,
-          cached: true
-        });
-      }
-
-      // Проверяем и бронируем тег (если старый занят - берем новый)
-      const claimedTag = await claimTag(trackingDocId, country);
-
-      if (!claimedTag) {
-        console.warn("⚠️ No available tags found!");
-        return res.status(503).json({ error: "No available tags" });
-      }
-
-      let clean_event_source_url = event_source_url || `https://nice-advice.info/product/${productId}`;
-      try {
-        const parsedUrl = new URL(clean_event_source_url);
-        const campId = parsedUrl.searchParams.get('campaign_id') || campaign_id;
-        parsedUrl.search = ''; // Remove all query parameters
-        if (campId) {
-          parsedUrl.searchParams.set('campaign_id', campId);
-        }
-        clean_event_source_url = parsedUrl.toString();
-      } catch (e) {
-        // fallback
-      }
-
-      const strapiPayload = {
-        clickDate: clickDate || new Date().toISOString(),
-        client_ip_address: ip,
-        fbp: fbp || "",
-        fbc: fbc || "",
-        productId: productId || "",
-        trackingId: trackingId || "",
-        client_user_agent: userAgent || "",
-        event_name: "Lead",
-        event_time: Math.floor(Date.now() / 1000).toString(),
-        event_id: crypto.randomUUID(),
-        event_source_url: clean_event_source_url,
-        action_source: "website",
-        isUsed: false,
-        external_id: external_id || null,
-        gclid: gclid || null,
-        wbraid: wbraid || null,
-        gbraid: gbraid || null,
-        campaign_id: campaign_id || null
-      };
-
-      // Сохраняем лид и отправляем в FB в фоне (без await), чтобы не задерживать юзера
-      leadPushStrapi(strapiPayload).catch(err => console.error("❌ Lead saving error:", err));
-      sendLeadToFacebook(strapiPayload).catch(err => console.error("FB Lead Error:", err));
-
-      // Обновляем кеш дедупликации (ttl уже обрабатывается LRUCache автоматически)
-      const cacheData = {
-        trackingId: claimedTag.name,
-        trackingDocId: claimedTag.documentId
-      };
-      recentLeads.set(cacheKeyIp, cacheData);
-      if (cacheKeyFbp) recentLeads.set(cacheKeyFbp, cacheData);
-      if (cacheKeyFbc) recentLeads.set(cacheKeyFbc, cacheData);
-
-      // Возвращаем финальный тег фронтенду НЕМЕДЛЕННО
-      res.json({
-        success: true,
-        trackingId: claimedTag.name,
-        trackingDocId: claimedTag.documentId
-      });
-
-    } catch (err) {
-      console.error("❌ Lead processing error:", err);
-      res.status(500).json({ error: err.message });
-    } finally {
-      release();
-    }
-  } catch (err) {
-    console.error("❌ Outer Lead processing error:", err);
-    res.status(500).json({ error: err.message });
-  }
-}); */
-
-
-/* cron.schedule('0 * * * *', async () => {
-  try {
-    console.log('[CRON][TAGS] start resetOldUsedTags');
-
-    const res = await fetch(
-      `${STRAPI_API_URL}/api/tagus/reset-old-used`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: STRAPI_TOKEN,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ hours: 26 }),
-      }
-    );
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Strapi error ${res.status}: ${text}`);
-    }
-
-    const data = await res.json();
-    console.log(
-      '[CRON][TAGS] done, threshold:',
-      data.thresholdDate
-    );
-  } catch (err) {
-    console.error('[CRON][TAGS] error:', err.message);
-  }
-}); */
-
-/* async function processAmazonOrders() {
-  console.log("🔄 Starting Amazon Orders Processing...");
-  try {
-    const ordersFromAmazon = await ParseAmazonOrders();
-    const leadsFromStrapi = await getLeadsFromStrapi();
-    const matchedLeads = await attachOrdersToLeads(ordersFromAmazon, leadsFromStrapi);
-    const createdPurchasesForStrapi = await createPurchasesToStrapi(matchedLeads);
-    const comissions = await getAmznComissionsFromStrapi();
-    const purchasesToStrapi = await applyCommissionsToPurchases(createdPurchasesForStrapi, comissions);
-    const purchasesLast24h = await getPurchasesFromStrapiLast24h();
-    const newPurchases = await filterNewPurchases(purchasesToStrapi, purchasesLast24h);
-
-    if (newPurchases.length > 0) {
-      await postPurchasesToStrapi(newPurchases);
-    }
-
-    const unusedPurchases = await getUnusedPurchasesFromStrapi();
-    const approvedPurchases = await runAmazonCCApproval(unusedPurchases);
-    const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(approvedPurchases);
-
-    for (const group of sendedToFbGroups) {
-      const { trackingId, items, totalValue } = group;
-
-      const message = items
-        .map(p => `
-  • ID: ${p.id}
-    ASIN: ${p.asin}
-    Tracking: ${p.trackingId}
-    Price: ${p.price}$
-    Commission: ${p.ccRate ? p.commission + '% + ' + p.ccRate : p.commission}%
-    Ordered Count: ${p.orderedCount}
-    Category: ${p.category}
-    Value: ${p.value}$
-    Title: ${p.title}
-  `.trim())
-        .join("\n\n");
-
-      await bot.sendMessage(
-        TG_BOT_ORDERS_ID,
-        `⭐️⭐️⭐️ NEW ORDERS ⭐️⭐️⭐️
-
-  New orders sent to Facebook (Group: ${trackingId})
-  💰 Total Group Value: ${totalValue}$
-
-  ${message}
-  `
-      );
-    }
-    console.log("✅ Finished Amazon Orders Processing.");
-  } catch (err) {
-    console.error("❌ Error in processAmazonOrders:", err);
-  }
-}
-
-cron.schedule("0 * * * *", processAmazonOrders); */
-
-
-
 
 
 server.post('/generate-multiproducts', async (req, res) => {
@@ -710,64 +614,6 @@ server.post('/generate-multiproducts', async (req, res) => {
 
 
 
-
-/* server.get('/test', async (req, res) => {
-
-  try {
-    for (let i = 0; i < 100; i++) {
-      await tagCreator("USA");
-    }
-
-    res.send({ success: true });
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ success: false, error: error.message });
-  }
-
-}) */
-
-/* server.get('/test-amazon-flow', async (req, res) => {
-  console.log("🔄 Starting test run for Amazon CC flow (skipping new order extraction)...");
-  try {
-    const unusedPurchases = await getUnusedPurchasesFromStrapi();
-    const approvedPurchases = await runAmazonCCApproval(unusedPurchases);
-    const sendedToFbGroups = await sendPurchasesToFacebookAndMarkUsed(approvedPurchases);
-
-    for (const group of sendedToFbGroups) {
-      const { trackingId, items, totalValue } = group;
-
-      const message = items
-        .map(p => `
-  • ID: ${p.id}
-    ASIN: ${p.asin}
-    Tracking: ${p.trackingId}
-    Price: ${p.price}$
-    Commission: ${p.ccRate ? p.commission + '% + ' + p.ccRate : p.commission}%
-    Ordered Count: ${p.orderedCount}
-    Category: ${p.category}
-    Value: ${p.value}$
-    Title: ${p.title}
-  `.trim())
-        .join("\n\n");
-
-      await bot.sendMessage(
-        TG_BOT_ORDERS_ID,
-        `⭐️⭐️⭐️ TEST: NEW ORDERS ⭐️⭐️⭐️
-
-  New orders sent to Facebook (Group: ${trackingId})
-  💰 Total Group Value: ${totalValue}$
-
-  ${message}
-  `
-      );
-    }
-    console.log("✅ Finished test run.");
-    res.json({ success: true, sendedToFbGroups });
-  } catch (err) {
-    console.error("❌ Error in test run:", err);
-    res.status(500).json({ error: err.message });
-  }
-}); */
 
 // ─── Click Tracking for Prelend Analytics ───
 function getDeviceType(ua) {

@@ -1,394 +1,95 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GoogleGenAI } from "@google/genai";
-import fetch from "node-fetch";
-import FormData from "form-data";
-import dotenv from 'dotenv';
+// cholesterintipps.de — German-language site about cholesterol, heart
+// health, and lifestyle changes for people 40–70 managing cholesterol.
+// Voice is German-language, careful and trustworthy, like a health
+// magazine you'd actually pick up at the Apotheke.
 
-dotenv.config();
+import { generateAndPostForSite } from './functionsPostBase.js';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const STRAPI_TOKEN = process.env.STRAPI_TOKEN;
-const STRAPI_API_URL = process.env.STRAPI_API_URL;
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-const ai = new GoogleGenAI(GEMINI_API_KEY);
+const cholesterinConfig = {
+  brandName: 'CholesterinTipps',
+  language: 'German',
+  audience:
+    'German-speaking adults aged 40–70 who are managing — or want to prevent — high cholesterol; many of them are also thinking about heart health, weight, blood pressure and a Mediterranean-leaning diet',
+  brandVoice:
+    'sachlich-warm und vertrauenswürdig wie ein gutes Apotheken-Heftchen. Klare, geerdete Sprache. Keine Panikmache, keine Heilsversprechen. Quellen werden angedeutet, nicht ausgeschmückt. Direkte Ansprache mit "Sie".',
+  topicHint:
+    'Schreibe so, als würdest du einem aufgeklärten, leicht skeptischen deutschsprachigen Leser etwas erklären, der schon viel gelesen hat. Konkrete Beispiele und Alltagsbezug bevorzugen. Statin-Themen sachlich behandeln, Ernährungstipps konkret und alltagstauglich.',
+  disclaimerHint:
+    'Wo es um Cholesterinwerte, Medikamente oder gesundheitliche Risiken geht, in einem Halbsatz erwähnen, dass der Artikel informativ ist und einen Arztbesuch nicht ersetzt — niemals als langer juristischer Hinweis.',
 
-const categories = [
-  'Aktuelle Forschung & Studien zum Cholesterin',
-  'Alltagstipps für ein cholesterinfreundliches Leben',
-  'Erfahrungsberichte & Interviews zum Thema Cholesterin',
-  'Ernährung & Lebensstil bei Cholesterinproblemen',
-  'Grundlagen & Hintergründe',
-  'Mythen & Fakten rund ums Cholesterin',
-  'Prävention & Screening von Cholesterinwerten',
-  'Spezielle Zielgruppen mit Cholesterin-Thematik',
-  'Therapie & Medikamente gegen hohen Cholesterin',
-  'Ursachen & Risikofaktoren für erhöhtes Cholesterin'
-];
+  collection: 'post2s',
+  authorField: 'author_2',
+  categoryField: 'category_2',
+  defaultAuthor: 1,
 
-const generateQuery = async () => {
-  try{
-    const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-    const prompt = `Come up with an interesting topic for a post in the category ${randomCategory} entirely in German. In the response, I want a simple subject line consisting of a few words. There's no need to explain anything or write anything before or after the subject line. So, the response should just be the subject line, one line.`;
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const result = await model.generateContent(prompt);
-    const cleanRes = result.response.text().trim();
-    if(randomCategory === 'Aktuelle Forschung & Studien zum Cholesterin'){
-      return {query: cleanRes, categoryId: 8, category: randomCategory}
-    }else if(randomCategory === 'Alltagstipps für ein cholesterinfreundliches Leben'){
-      return {query: cleanRes, categoryId: 9, category: randomCategory}
-    }else if(randomCategory === 'Erfahrungsberichte & Interviews zum Thema Cholesterin'){
-      return {query: cleanRes, categoryId: 10, category: randomCategory}
-    }else if(randomCategory === 'Ernährung & Lebensstil bei Cholesterinproblemen'){
-      return {query: cleanRes, categoryId: 3, category: randomCategory}
-    }else if(randomCategory === 'Grundlagen & Hintergründe'){
-      return {query: cleanRes, categoryId: 1, category: randomCategory}
-    }else if(randomCategory === 'Mythen & Fakten rund ums Cholesterin'){
-      return {query: cleanRes, categoryId: 7, category: randomCategory}
-    }else if(randomCategory === 'Prävention & Screening von Cholesterinwerten'){
-      return {query: cleanRes, categoryId: 5, category: randomCategory}
-    }else if(randomCategory === 'Spezielle Zielgruppen mit Cholesterin-Thematik'){
-      return {query: cleanRes, categoryId: 6, category: randomCategory}
-    }else if(randomCategory === 'Therapie & Medikamente gegen hohen Cholesterin'){
-      return {query: cleanRes, categoryId: 4, category: randomCategory}
-    }else{
-      return {query: cleanRes, categoryId: 2, category: randomCategory}
-    }
-  }
-  catch (error) {
-    console.error(error);
-    return {error: 'Ошибка при генерации Темы'};
-  }
-  
-}
+  categories: [
+    'Aktuelle Forschung & Studien zum Cholesterin',
+    'Alltagstipps für ein cholesterinfreundliches Leben',
+    'Erfahrungsberichte & Interviews zum Thema Cholesterin',
+    'Ernährung & Lebensstil bei Cholesterinproblemen',
+    'Grundlagen & Hintergründe',
+    'Mythen & Fakten rund ums Cholesterin',
+    'Prävention & Screening von Cholesterinwerten',
+    'Spezielle Zielgruppen mit Cholesterin-Thematik',
+    'Therapie & Medikamente gegen hohen Cholesterin',
+    'Ursachen & Risikofaktoren für erhöhtes Cholesterin',
+  ],
+  categoryIds: {
+    'Aktuelle Forschung & Studien zum Cholesterin': 8,
+    'Alltagstipps für ein cholesterinfreundliches Leben': 9,
+    'Erfahrungsberichte & Interviews zum Thema Cholesterin': 10,
+    'Ernährung & Lebensstil bei Cholesterinproblemen': 3,
+    'Grundlagen & Hintergründe': 1,
+    'Mythen & Fakten rund ums Cholesterin': 7,
+    'Prävention & Screening von Cholesterinwerten': 5,
+    'Spezielle Zielgruppen mit Cholesterin-Thematik': 6,
+    'Therapie & Medikamente gegen hohen Cholesterin': 4,
+    'Ursachen & Risikofaktoren für erhöhtes Cholesterin': 2,
+  },
 
-const generateGlobalObj = async (query, categoryId, category) => {
-  const globalObj = {
-    title: '',
-    description: [
-      {
-        type: 'paragraph',
-        children: [
-          {
-            type: 'text',
-            text: ''
-          }
-        ]}
-    ],
-    isPopular: false,
-    paragraphs: [
-      {
-        subtitle: '',
-        description: [
-          {
-            type: 'paragraph',
-            children: [
-              {
-                type: 'text',
-                text: ''
-              }
-            ]
-          }
-        ],
-        ads: [
-          {title: 'Example adds title', url: ''},
-          {title: 'Example adds title', url: ''}
-        ],
-        image: undefined
-      },
-      {
-        subtitle: '',
-        description: [
-          {
-            type: 'paragraph',
-            children: [
-              {
-                type: 'text',
-                text: ''
-              }
-            ]
-          }
-        ],
-        ads: [
-          {title: 'Example adds title', url: 'https://example.com'},
-          {title: 'Example adds title', url: 'https://example.com'}
-        ],
-        image: undefined
-      }
-    ],
-    ads: [
-      {title: 'Example adds title', url: 'https://example.com'},
-      {title: 'Example adds title', url: 'https://example.com'},
-      {title: 'Example adds title', url: 'https://example.com'}
-    ],
-    firstAdBanner: {
-      url: 'https://example.com',
-      image: undefined
-    },
-    secondAdBanner: {
-      url: 'https://example.com',
-      image: undefined
-    },
-    author_2: 1,
-    category_2: categoryId,
-    image: undefined
-  }
+  imagePrefix: 'cholesterin',
 
-  let title = undefined;
-  let description = undefined;
-  let subTitleP1 = undefined;
-  let descrP1 = undefined;
-  let subTitleP2 = undefined;
-  let descrP2 = undefined;
+  // Visual identity — German/Central European setting, kitchens, doctor
+  // offices, food prep, mature adults. Warm, calm, slightly clinical.
+  imageStyle: {
+    context:
+      'CholesterinTipps.de is a German health information site about cholesterol and heart-friendly living. Photography style: editorial health magazine, Central European setting, calm and trustworthy.',
+    palette:
+      'soft sage greens, oat-cream, muted brick. Honest natural light. Mediterranean-friendly food colors when food is shown (olive oil, fresh greens, oily fish, whole grains, nuts, berries).',
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-  try{
-    const resTitle = await model.generateContent(`Come up with an interesting title for my post on the topic ${query}. The title should be approximately 45-70 characters long. In your reply, write absolutely nothing except the title. Don't write anything at the beginning or end of your reply. Just give me the result as the title. The title must be in German. Don't give a truncated answer; the title needs to be full and complete. This post will be related to cholesterol levels and its harmful effects.`);
-    title = resTitle.response.text().trim();
-  }catch(e){
-    console.log(`Ошибка при генерации заголовка поста: ${e}`);
-    return false;
-  }
-  try{
-    const resDescription = await model.generateContent(`Create a description for my post. It must contain at least 700 characters. This is the category in which this post will be located on my website ${category}. This is the topic of the post that needs to be taken into account when creating the description ${query}. The description must be in German. In your reply, write absolutely nothing except the description. Don't write anything at the beginning or end of your reply. This post will be related to cholesterol levels and its harmful effects.`);
-    description = resDescription.response.text().trim();
-  }catch(e){
-    console.log(`Ошибка при создании описания поста: ${e}`)
-    return false;
-  }
-  try{
-    const resSubTitleP1 = await model.generateContent(`Write a title for a paragraph of my article. In your response, don't include anything other than the title itself. Don't add anything at the beginning or end of your response; just write the title. It should be 45-75 characters long and make sense. When creating the title, consider the category the article is in - ${category}, Also consider the topic of the article - ${query}. When creating a title, take into account the description of my article - ${description}. An article about the dangers of cholesterol. The title must be in German.`);
-    subTitleP1 = resSubTitleP1.response.text().trim();
-  }catch(e){
-    console.log(`Ошибка при создании первого подзаголовка поста: ${e}`)
-    return false;
-  }
-  try{
-    const resDescrP1 = await model.generateContent(`Create a paragraph for my article on the website. In your response, write nothing but the paragraph itself. Don't add anything before or after the paragraph. Your response should only include the paragraph itself. Write it in German. Here's the category the paragraph is in - ${category}. This is the topic of my article - ${query}. Here is the description of my article - ${description}. And here is the heading for the paragraph you need to create - ${subTitleP1}. The length of a paragraph must be no less than 700 characters.`);
-    descrP1 = resDescrP1.response.text().trim();
-  }catch(e){
-    console.log(`Ошибка при создании первого параграфа поста: ${e}`);
-    return false;
-  }
-  try{
-    const resSubTitleP2 = await model.generateContent(`Write a title for a paragraph of my article. In your response, don't include anything other than the title itself. Don't add anything at the beginning or end of your response; just write the title. It should be 45-75 characters long and make sense. When creating the title, consider the category the article is in - ${category}, Also consider the topic of the article - ${query}. When creating a title, take into account the description of my article - ${description}. An article about the dangers of cholesterol. The title must be in German.`);
-    subTitleP2 = resSubTitleP2.response.text().trim();
-  }catch(e){
-    console.log(`Ошибка при создании второго подзаголовка поста: ${e}`)
-    return false;
-  }
-  try{
-    const resDescrP2 = await model.generateContent(`Create a paragraph for my article on the website. In your response, write nothing but the paragraph itself. Don't add anything before or after the paragraph. Your response should only include the paragraph itself. Write it in German. Here's the category the paragraph is in - ${category}. This is the topic of my article - ${query}. Here is the description of my article - ${description}. And here is the heading for the paragraph you need to create - ${subTitleP2}. The length of a paragraph must be no less than 700 characters.`);
-    descrP2 = resDescrP2.response.text().trim();
-  }catch(e){
-    console.log(`Ошибка при создании второго параграфа  поста: ${e}`);
-    return false;
-  }
+    subjectClose:
+      'close-up of cholesterol-relevant detail: olive oil drizzling on a salad, a blood-pressure cuff on a wrist, a slice of whole-grain bread, the label of a medicine box (no readable text), hand holding a fork over a healthy plate.',
+    settingClose:
+      'a real German or Austrian kitchen, a Hausarzt practice counter, a wooden cutting board, a pharmacy shelf. Clean, lived-in, not over-styled.',
+    moodClose: 'calm, evidence-based, like a Stiftung-Warentest editorial frame.',
 
-  if(title && description && subTitleP1 && descrP1 && subTitleP2 && descrP2){
-    globalObj.title = title;
-    globalObj.description[0].children[0].text = description;
-    globalObj.paragraphs[0].subtitle = subTitleP1;
-    globalObj.paragraphs[0].description[0].children[0].text = descrP1;
-    globalObj.paragraphs[1].subtitle = subTitleP2;
-    globalObj.paragraphs[1].description[0].children[0].text = descrP2;
-  }else{
-    console.log('Ошибка генерации главного обьекта');
-    return false;
-  }
+    subjectAction:
+      'a German-speaking adult aged 45–70 doing something concrete that supports heart health: preparing fish, walking with Nordic poles, reading a nutrition label at a Supermarkt, stretching at home.',
+    settingAction:
+      'a real-feeling Central European home, a market hall (Markthalle), a footpath through a park, an apothecary, a doctor\'s waiting room.',
+    moodAction: 'practical, hopeful, gentle determination.',
 
-  return globalObj;
-}
+    subjectHero:
+      'a thoughtful Central European adult aged 50–68 in a hero moment that hints at the article story — at the kitchen table, in conversation, or in a quiet outdoor pause.',
+    settingHero:
+      'kitchen with morning light, balcony in a German city, a clinical-but-warm doctor\'s office, or an outdoor walking path with autumn light.',
+    moodHero:
+      'trustworthy, magazine-cover quality, gentle hope. No fear-mongering imagery (no clutching chest, no red warning signs).',
 
-// const generateGlobalObj = async (query) => {
-//   try {
-//     const prompt = `You are a CMS content generator. All key values ​​must be in German, but do not touch the keys themselves. Return ONLY a valid raw JSON object — no markdown, no explanations, no backticks, no comments. Your output MUST start and end with { and }. Create an article in JSON format based on the topic: "${query}". The article must include exactly 2 paragraphs in the "paragraphs" array. JSON must always have property 'paragraphs' which is an array of EXACTLY 2 objects, no more, no less. Never reply with fewer or more than 2 items in the paragraphs array. The article should match this structure:
-//               {
-//                 "title": "SEO-optimized, human-readable title (55–65 characters, includes main keyword)",
-//                 "description": ["Full intro (min 700 characters). Begin with a 150–160 character SEO meta description, then an engaging intro mentioning ${{query}} and 1–2 LSI terms."],
-//                 "isPopular": false,
-//                 "paragraphs": [
-//                   {
-//                     "subtitle": "Informative subheading #1 (with keyword variation)",
-//                     "description": ["Comprehensive section (min 700 characters) exploring one core aspect of the topic. Integrate 2–3 LSI terms and implicitly answer one People Also Ask question. Provide examples, steps, or data."],
-//                     "ads": [
-//                       { "title": "Helpful Tool or Product", "url": "https://..." },
-//                       { "title": "Trusted Resource", "url": "https://..." }
-//                     ],
-//                     "image_prompt": "Describe a realistic, contextually relevant image for this section (avoid text or logos)"
-//                   }
-//                 ],
-//                 "ads": [
-//                   { "title": "...", "url": "https://..." },
-//                   { "title": "...", "url": "https://..." },
-//                   { "title": "...", "url": "https://..." }
-//                 ],
-//                 "image_prompt": "Describe a realistic, contextually relevant image for this section (avoid text or logos)",
-//                 "firstAdBanner": { "url": "https://...", "image_prompt": "Describe a realistic, contextually relevant image for this section (avoid text or logos)" },
-//                 "secondAdBanner": { "url": "https://...", "image_prompt": "Describe a realistic, contextually relevant image for this section (avoid text or logos)" }
-//               }`
-//     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-//     const result = await model.generateContent(prompt);
-//     const jsonResult = JSON.parse(result.response.text())
-//     return jsonResult;
-//   } catch (error) {
-//     console.error(error);
-//     return {error: 'Ошибка при генерации Главного Обьекта'};
-//   }
-// }
+    subjectProduct:
+      'still life of heart-friendly food or relevant items: oats and berries in a bowl, omega-3 capsules on a wooden surface, a blood-pressure monitor next to a notebook, fresh herbs on linen.',
+    settingProduct:
+      'flat lay or 3/4 angle on light wood, linen, or stone. Soft side light.',
 
-const generateImages = async (globalObj) => {
-  const basePrompt = `
-Create an ultra-realistic photograph for a German-language website article
-about the dangers of cholesterol.
-The image must look like a real photo taken with a DSLR camera.
-No illustration, no CGI, no fantasy, no magic, no fictional objects.
-Natural lighting, real people, real environments, realistic food and medical context.
-`;
-
-  const prompts = [
-    `${basePrompt}
-Article title: ${globalObj.title}
-Article description: ${globalObj.description[0].children[0].text}
-Paragraph: ${globalObj.paragraphs[0].description[0].children[0].text}
-`,
-
-    `${basePrompt}
-Article title: ${globalObj.title}
-Article description: ${globalObj.description[0].children[0].text}
-Paragraph: ${globalObj.paragraphs[1].description[0].children[0].text}
-`,
-
-    `${basePrompt}
-Article title: ${globalObj.title}
-Article description: ${globalObj.description[0].children[0].text}
-`,
-
-    `${basePrompt}
-Article title: ${globalObj.title}
-Article description: ${globalObj.description[0].children[0].text}
-First paragraph: ${globalObj.paragraphs[0].description[0].children[0].text}
-Second paragraph: ${globalObj.paragraphs[1].description[0].children[0].text}
-`,
-
-    `${basePrompt}
-Article title: ${globalObj.title}
-Article description: ${globalObj.description[0].children[0].text}
-First paragraph: ${globalObj.paragraphs[0].description[0].children[0].text}
-Second paragraph: ${globalObj.paragraphs[1].description[0].children[0].text}
-`
-  ];
-
-  const ids = [];
-
-  for (let i = 0; i < prompts.length; i++) {
-    try {
-      const response = await ai.models.generateImages({
-        model: "imagen-4.0-generate-001",
-        prompt: prompts[i],
-        config: {
-          numberOfImages: 1,
-          aspectRatio: "1:1",
-          outputMimeType: "image/png",
-        },
-      });
-
-      const generated = response.generatedImages?.[0];
-      if (!generated?.image?.imageBytes) {
-        console.warn(`⚠️ No image data for image ${i + 1}`, response);
-        continue;
-      }
-
-      const buffer = Buffer.from(
-        generated.image.imageBytes,
-        "base64"
-      );
-
-      const formData = new FormData();
-      formData.append("files", buffer, {
-        filename: `imagen-article-${i + 1}.png`,
-        contentType: "image/png",
-      });
-
-      const uploadRes = await fetch(`${STRAPI_API_URL}/api/upload`, {
-        method: "POST",
-        headers: {
-          Authorization: STRAPI_TOKEN,
-        },
-        body: formData,
-      });
-
-      const result = await uploadRes.json();
-
-      if (Array.isArray(result) && result[0]?.id) {
-        ids.push(result[0].id);
-        console.log(`✅ Uploaded image ${i + 1} to Strapi: id=${result[0].id}`);
-      } else {
-        console.warn(`⚠️ No id found for image ${i + 1}`, result);
-      }
-    } catch (err) {
-      console.error(`❌ Error generating image ${i + 1}`, err);
-    }
-  }
-
-  return ids;
+    subjectLifestyle:
+      'a candid wide shot of a German-speaking adult relaxing in a healthy context — coffee at the window, slow walk with grandchildren, sitting on a balcony with a book.',
+    settingLifestyle:
+      'distinctly European setting: Altbau apartment, market square, Spaziergang in a park. Different feel from the product image.',
+  },
 };
 
-
-const prepForPush = async (ids, obj) => {
-  const editedObj = obj;
-  editedObj.paragraphs[0].image = ids[0];
-  editedObj.paragraphs[1].image = ids[1];
-  editedObj.image = ids[2];
-  editedObj.firstAdBanner.image = ids[3];
-  editedObj.secondAdBanner.image = ids[4];
-
-  return editedObj;
+export async function generateAndPostCholesterin() {
+  return generateAndPostForSite(cholesterinConfig);
 }
 
-const strapiPost = async (obj) => {
-  try {
-    console.log(obj);
-      const strapiRes = await fetch(`${STRAPI_API_URL}/api/post2s`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: STRAPI_TOKEN,
-        },
-        body: JSON.stringify({ data: obj }),
-      })
-      if (!strapiRes.ok) {
-        const err = await strapiRes.text()
-        throw new Error(err)
-      }
-      return strapiRes.json();
-    } catch (err) {
-      console.error('❌ Create-post error:', err)
-      return err.message;
-    }
-}
-
-const generateAndPostCholesterin = async () => {
-  try {
-    const { query, categoryId, category } = await generateQuery();
-    console.log('Тема згенерована');
-    const globalObj = await generateGlobalObj(query, categoryId, category);
-    console.log('Глобальний обєкт згенеровано');
-    const imageIds = await generateImages(globalObj);
-    console.log('картинки завантажено');
-    const prepForPushRes = await prepForPush(imageIds, globalObj);
-    console.log('обєкт змінено')
-    const isPostedToStrapi = await strapiPost(prepForPushRes);
-    return isPostedToStrapi;
-
-    // const imageids = await generateImages(result);
-    // const resultToStrapiPost = await prepForPush(result, imageids, categoryId);
-    // const isPostedToStrapi = await strapiPost(resultToStrapiPost);
-    // console.log('generateAndPost finished:', isPostedToStrapi);
-    // return isPostedToStrapi;
-  } catch (error) {
-    console.error('Ошибка в generateAndPost:', error);
-    throw error;
-  }
-}
-
-export {generateGlobalObj, generateImages, generateQuery, prepForPush, strapiPost, generateAndPostCholesterin};
+export { cholesterinConfig };

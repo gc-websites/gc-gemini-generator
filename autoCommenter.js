@@ -175,13 +175,17 @@ async function appendCommentToPost(collection, post, comment) {
  * Запускает один проход автокомментатора по всем сайтам.
  * Возвращает структурированный отчёт.
  */
-export async function runAutoCommenter({ postsPerSite = 10 } = {}) {
+export async function runAutoCommenter({
+  postsPerSite = 10,
+  maxCommentsPerPost = 8,
+} = {}) {
   const startedAt = new Date();
   const report = {
     startedAt: startedAt.toISOString(),
     sites: [],
     totalPosted: 0,
     totalErrors: 0,
+    totalSkippedSaturated: 0,
   };
 
   for (const site of SITES) {
@@ -190,6 +194,7 @@ export async function runAutoCommenter({ postsPerSite = 10 } = {}) {
       domain: site.domain,
       posted: 0,
       skipped: 0,
+      saturated: 0,
       errors: [],
       samples: [],
     };
@@ -200,6 +205,15 @@ export async function runAutoCommenter({ postsPerSite = 10 } = {}) {
 
       for (const post of posts) {
         try {
+          // Skip posts that already have enough organic-looking comments.
+          // Prevents the same posts from accumulating fake comments day after day.
+          const existingCount = (post.comments || []).length;
+          if (existingCount >= maxCommentsPerPost) {
+            siteReport.saturated += 1;
+            report.totalSkippedSaturated += 1;
+            continue;
+          }
+
           const snippet = extractSnippet(post.description, 500);
           const text = await generateCommentText({
             title: post.title,
