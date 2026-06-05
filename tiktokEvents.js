@@ -72,11 +72,15 @@ export function buildTikTokEventBody(p) {
  */
 export async function sendTikTokEvent(input, cfg = {}) {
   const { token, pixelId, testEventCode } = cfg;
+  // Normalized return shape so the caller can log the outcome:
+  //   { status: 'ok'|'failed'|'skipped', ok, code, message, error, skipped, requestBody }
+  // requestBody is the exact payload sent to TikTok (null when skipped).
+  let requestBody = null;
   try {
-    if (!token || !pixelId) return { skipped: 'not_configured' };
-    if (!input.event || !input.eventId) return { skipped: 'missing_event' };
+    if (!token || !pixelId) return { status: 'skipped', skipped: 'not_configured', requestBody: null };
+    if (!input.event || !input.eventId) return { status: 'skipped', skipped: 'missing_event', requestBody: null };
 
-    const body = buildTikTokEventBody({ ...input, pixelId, testEventCode });
+    requestBody = buildTikTokEventBody({ ...input, pixelId, testEventCode });
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 4000);
@@ -88,7 +92,7 @@ export async function sendTikTokEvent(input, cfg = {}) {
           'Access-Token': token,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(requestBody),
         signal: controller.signal,
       });
     } finally {
@@ -99,11 +103,11 @@ export async function sendTikTokEvent(input, cfg = {}) {
     // TikTok returns { code: 0, message: "OK", ... } on success.
     if (json.code !== 0) {
       console.error('❌ TikTok Events API non-zero:', json.code, json.message);
-      return { ok: false, code: json.code, message: json.message };
+      return { status: 'failed', ok: false, code: json.code, message: json.message, requestBody };
     }
-    return { ok: true, code: 0 };
+    return { status: 'ok', ok: true, code: 0, message: json.message, requestBody };
   } catch (err) {
     console.error('❌ TikTok Events API error:', err?.message || err);
-    return { ok: false, error: err?.message || String(err) };
+    return { status: 'failed', ok: false, error: err?.message || String(err), requestBody };
   }
 }

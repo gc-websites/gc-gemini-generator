@@ -633,6 +633,27 @@ function getDeviceType(ua) {
   return 'desktop';
 }
 
+// Write one row to the Strapi `tt-conversion` collection logging a TikTok Events
+// API send (what was sent + TikTok's response). Fire-and-forget: never blocks.
+async function logTikTokConversion(record) {
+  try {
+    const r = await fetch(`${STRAPI_API_URL}/api/tt-conversions`, {
+      method: 'POST',
+      headers: {
+        Authorization: STRAPI_TOKEN,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ data: record }),
+    });
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      console.error('❌ tt-conversion log rejected:', r.status, txt.slice(0, 500));
+    }
+  } catch (err) {
+    console.error('❌ tt-conversion log error:', err.message);
+  }
+}
+
 server.post('/track-click', async (req, res) => {
   try {
     let ip = requestIp.getClientIp(req);
@@ -756,9 +777,14 @@ server.post('/track-click', async (req, res) => {
     // the browser pixel via the shared tt_event_id). tt_event_id now rides on the
     // conversion event (the first ad view). Fire-and-forget — never blocks.
     if (tt_event_id) {
+      const ttEvent = tt_event || 'CompletePayment';
+      const numTtValue =
+        tt_value != null && tt_value !== '' && !Number.isNaN(Number(tt_value))
+          ? Number(tt_value)
+          : null;
       sendTikTokEvent(
         {
-          event: tt_event || 'CompletePayment',
+          event: ttEvent,
           eventId: tt_event_id,
           eventTimeSec: Math.floor(Date.now() / 1000),
           url: page_url || (source_url ? `https://nice-advice.info${source_url}` : undefined),
@@ -771,7 +797,43 @@ server.post('/track-click', async (req, res) => {
           contentId: tt_content_id,
         },
         { token: TT_TOKEN, pixelId: TT_PIXEL_ID, testEventCode: TT_TEST_EVENT_CODE }
-      ).catch(() => { /* never break UX */ });
+      )
+        // Mirror the send into Strapi `tt-conversion` (what was sent + TikTok's
+        // response). Fire-and-forget — never blocks the response or the user.
+        .then((result) =>
+          logTikTokConversion({
+            session_id: session_id || null,
+            event: ttEvent,
+            event_id: tt_event_id,
+            pixel_id: TT_PIXEL_ID || null,
+            ttclid: ttclid || null,
+            value: numTtValue,
+            currency: tt_currency || null,
+            content_id: tt_content_id || null,
+            client_ip: ip || null,
+            user_agent: userAgent || null,
+            country: country || null,
+            device_type: deviceType || null,
+            page_url: page_url || null,
+            source_url: source_url || null,
+            referrer: referrer || null,
+            prelend_slug: prelend_slug || null,
+            locale: locale || null,
+            platform: platform || null,
+            utm_source: utm_source || null,
+            utm_medium: utm_medium || null,
+            utm_campaign: utm_campaign || null,
+            utm_content: utm_content || null,
+            status: result.status || (result.ok ? 'ok' : 'failed'),
+            response_code: result.code != null ? Number(result.code) : null,
+            response_message:
+              result.message || result.error || (result.skipped ? `skipped:${result.skipped}` : null),
+            test_event_code: TT_TEST_EVENT_CODE || null,
+            request_body: result.requestBody || null,
+            sent_at: new Date().toISOString(),
+          })
+        )
+        .catch((err) => console.error('❌ TikTok send/log chain error:', err?.message || err));
     }
 
     res.status(200).json({ ok: true });

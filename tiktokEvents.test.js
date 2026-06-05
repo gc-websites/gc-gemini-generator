@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildTikTokEventBody } from './tiktokEvents.js';
+import { buildTikTokEventBody, sendTikTokEvent } from './tiktokEvents.js';
 
 test('builds a minimal web event with ttclid/ip/ua and a dedup event_id', () => {
   const body = buildTikTokEventBody({
@@ -38,4 +38,19 @@ test('adds test_event_code only when provided', () => {
 
   const b = buildTikTokEventBody({ pixelId: 'P', event: 'E', eventId: '1', eventTimeSec: 1, testEventCode: 'TEST123' });
   assert.equal(b.test_event_code, 'TEST123');
+});
+
+// --- Normalized return shape (drives the tt-conversion log status) ---
+
+test('sendTikTokEvent returns status=skipped when not configured (no network)', async () => {
+  const r = await sendTikTokEvent({ event: 'E', eventId: '1' }, {});
+  assert.equal(r.status, 'skipped');
+  assert.equal(r.skipped, 'not_configured');
+  assert.equal(r.requestBody, null);
+});
+
+test('sendTikTokEvent returns status=skipped when event is missing', async () => {
+  const r = await sendTikTokEvent({}, { token: 'T', pixelId: 'PIX' });
+  assert.equal(r.status, 'skipped');
+  assert.equal(r.skipped, 'missing_event');
 });
