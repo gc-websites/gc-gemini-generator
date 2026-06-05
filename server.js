@@ -47,6 +47,8 @@ const corsOptions = {
     'https://www.dev.nice-advice.info',
     'https://hairstylesforseniors.com',
     'https://www.hairstylesforseniors.com',
+    'https://suggestionoftheday.com',
+    'https://www.suggestionoftheday.com',
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
