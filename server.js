@@ -751,8 +751,9 @@ server.post('/track-click', async (req, res) => {
       .catch(err => console.error('❌ Click tracking Strapi error:', err.message));
 
     // Forward the conversion to the TikTok Events API (server-side; deduped with
-    // the browser pixel via the shared tt_event_id). Fire-and-forget — never blocks.
-    if (event_type === 'cta_click' && tt_event_id) {
+    // the browser pixel via the shared tt_event_id). tt_event_id now rides on the
+    // conversion event (the first ad view). Fire-and-forget — never blocks.
+    if (tt_event_id) {
       sendTikTokEvent(
         {
           event: tt_event || 'CompletePayment',
