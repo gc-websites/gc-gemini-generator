@@ -14,6 +14,7 @@ import { checkSitesAvailability } from './siteChecker.js';
 import { runAutoCommenter, formatReportForTelegram } from './autoCommenter.js';
 import { attachForumRoutes } from './forumRoutes.js';
 import { seedPersonas, genThreadSafe, genReplySafe, seedForum, seedForumQuick, fillRepliesOnExistingThreads, fillCannedReplies, fillCannedThreads } from './functionsForum.js';
+import { sendTikTokEvent } from './tiktokEvents.js';
 
 const server = express();
 const PORT = process.env.PORT || 4000;
@@ -24,6 +25,12 @@ const STRAPI_TOKEN = process.env.STRAPI_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const TG_TOKEN = process.env.TG_TOKEN;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
+
+// TikTok Events API (server-side). Token is the secret (in .env as TT_TOKEN);
+// pixel id is public and defaults to the configured pixel. Test code is optional.
+const TT_TOKEN = process.env.TT_TOKEN;
+const TT_PIXEL_ID = process.env.TT_PIXEL_ID || 'CGUJ36RC77U0HA6062A0';
+const TT_TEST_EVENT_CODE = process.env.TT_TEST_EVENT_CODE;
 
 const corsOptions = {
   origin: [
@@ -667,6 +674,21 @@ server.post('/track-click', async (req, res) => {
       fb_event,
       fb_pixel_mode,
       fb_fire_type,
+      page_url,
+      tt_pixel,
+      tt_event,
+      tt_event_id,
+      ttclid,
+      tt_value,
+      tt_currency,
+      tt_content_id,
+      platform,
+      landing_url,
+      sequence,
+      ms_since_start,
+      scroll_depth,
+      time_on_page,
+      meta,
     } = req.body;
 
     const payload = {
@@ -696,6 +718,18 @@ server.post('/track-click', async (req, res) => {
         fb_event: fb_event || null,
         fb_pixel_mode: fb_pixel_mode || null,
         fb_fire_type: fb_fire_type || null,
+        platform: platform || null,
+        page_url: page_url || null,
+        landing_url: landing_url || null,
+        sequence: sequence != null ? Number(sequence) : null,
+        ms_since_start: ms_since_start != null ? String(ms_since_start) : null,
+        scroll_depth: scroll_depth != null ? Number(scroll_depth) : null,
+        time_on_page: time_on_page != null ? Number(time_on_page) : null,
+        ttclid: ttclid || null,
+        tt_pixel: tt_pixel || null,
+        tt_event: tt_event || null,
+        tt_event_id: tt_event_id || null,
+        meta: meta || null,
       }
     };
 
@@ -707,7 +741,35 @@ server.post('/track-click', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
-    }).catch(err => console.error('❌ Click tracking Strapi error:', err.message));
+    })
+      .then(async (r) => {
+        if (!r.ok) {
+          const txt = await r.text().catch(() => '');
+          console.error('❌ Strapi click-event rejected:', r.status, txt.slice(0, 500));
+        }
+      })
+      .catch(err => console.error('❌ Click tracking Strapi error:', err.message));
+
+    // Forward the conversion to the TikTok Events API (server-side; deduped with
+    // the browser pixel via the shared tt_event_id). Fire-and-forget — never blocks.
+    if (event_type === 'cta_click' && tt_event_id) {
+      sendTikTokEvent(
+        {
+          event: tt_event || 'CompletePayment',
+          eventId: tt_event_id,
+          eventTimeSec: Math.floor(Date.now() / 1000),
+          url: page_url || (source_url ? `https://nice-advice.info${source_url}` : undefined),
+          referrer,
+          ip,
+          userAgent,
+          ttclid,
+          value: tt_value,
+          currency: tt_currency,
+          contentId: tt_content_id,
+        },
+        { token: TT_TOKEN, pixelId: TT_PIXEL_ID, testEventCode: TT_TEST_EVENT_CODE }
+      ).catch(() => { /* never break UX */ });
+    }
 
     res.status(200).json({ ok: true });
   } catch (err) {
