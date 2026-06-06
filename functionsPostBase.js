@@ -164,7 +164,7 @@ async function urlOk(url, timeoutMs = 12000) {
   }
 }
 
-async function buildRichParagraphs(ctx) {
+export async function buildRichParagraphs(ctx) {
   const { brand, baseRules, title, description, subTitleP1, descrP1, subTitleP2, descrP2, disclaimerHint, cfg = {} } = ctx;
 
   // Site-aware wording. Every default below reproduces the original hairstyles
