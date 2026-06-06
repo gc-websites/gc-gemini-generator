@@ -6,6 +6,9 @@ import { generateAndPostForSite } from './functionsPostBase.js';
 
 const hairStylesConfig = {
   brandName: 'HairStylesForSeniors',
+  // Deep articles: Key Takeaways + body sections + step-by-step / mistakes +
+  // FAQ, rendered as proper Strapi blocks, with 3 full-frame images (no voids).
+  richContent: true,
   language: 'English',
   audience:
     'English-speaking adults aged 50–75 (more women than men, but write inclusively) interested in age-appropriate hairstyles, gentle hair care, gray coverage, hair thinning, products and confidence tips',

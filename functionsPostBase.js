@@ -99,6 +99,78 @@ Output ONLY the topic line, nothing else.`;
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// Rich-content helpers (only used when siteConfig.richContent === true).
+// Build Strapi "blocks" (paragraph / heading / list) for deep articles —
+// Key Takeaways, step-by-step / mistakes sections and an FAQ — matching what
+// the hairstyles frontend renders. Other sites keep the plain 2-section output.
+// ──────────────────────────────────────────────────────────────────────
+
+const mkPara = t => ({ type: 'paragraph', children: [{ type: 'text', text: String(t) }] });
+const mkHeading = (t, level = 3) => ({ type: 'heading', level, children: [{ type: 'text', text: String(t) }] });
+const mkList = (items, ordered = false) => ({
+  type: 'list',
+  format: ordered ? 'ordered' : 'unordered',
+  children: (items || []).filter(Boolean).map(t => ({ type: 'list-item', children: [{ type: 'text', text: String(t) }] })),
+});
+const splitParas = t => String(t || '').split(/\n\s*\n/).map(s => s.trim()).filter(Boolean).map(mkPara);
+
+// Gemini call that returns parsed JSON (tolerant to code fences / stray prose).
+async function geminiJSON(prompt, fallback) {
+  try {
+    const raw = await geminiText(prompt);
+    const m = raw.match(/[[{][\s\S]*[\]}]/);
+    return JSON.parse(m ? m[0] : raw);
+  } catch (e) {
+    console.warn('[geminiJSON] parse failed:', e.message);
+    return fallback;
+  }
+}
+
+async function buildRichParagraphs(ctx) {
+  const { brand, baseRules, title, description, subTitleP1, descrP1, subTitleP2, descrP2, disclaimerHint } = ctx;
+
+  const takeaways = await geminiJSON(
+    `You are a senior hair-care editor at ${brand}. ${baseRules}
+Article title: "${title}". Intro: "${description.slice(0, 300)}".
+Write 4-5 SPECIFIC, actionable "Key Takeaways" — the real points a reader should remember. Concrete (timings, amounts, techniques), never vague.
+Return ONLY a JSON array of strings.`, [],
+  );
+  const sections = await geminiJSON(
+    `You are an expert hair-care writer at ${brand}. ${baseRules}
+Article: "${title}". It already has two body sections titled "${subTitleP1}" and "${subTitleP2}" — do NOT repeat them.
+Write 2 ADDITIONAL deep, genuinely useful sections specific to this topic. Good shapes: a numbered step-by-step how-to; "Common Mistakes to Avoid"; "Adjusting for Your Hair Type or Face Shape". Use real techniques, timings and amounts — never generic fluff. ${disclaimerHint}
+Return ONLY a JSON array of up to 2 objects, each: {"heading":"...","paragraphs":["0-2 lead sentences"],"list":["concrete step or tip","..."],"listOrdered":true_for_step_by_step_else_false}`, [],
+  );
+  const faq = await geminiJSON(
+    `You are a hair-care expert at ${brand}. ${baseRules}
+Article: "${title}". Write 4 real questions a reader would ask about THIS specific topic, each with a specific 2-4 sentence answer. Where the answer touches scalp conditions, significant hair loss or medication, add a warm one-line "see a dermatologist" note.
+Return ONLY a JSON array: [{"question":"...","answer":"..."}]`, [],
+  );
+
+  const paragraphs = [];
+  if (Array.isArray(takeaways) && takeaways.filter(Boolean).length >= 2) {
+    paragraphs.push({ subtitle: 'Key Takeaways', description: [mkList(takeaways)], image: undefined });
+  }
+  paragraphs.push({ subtitle: subTitleP1, description: splitParas(descrP1), image: undefined, _img: 'b1' });
+  paragraphs.push({ subtitle: subTitleP2, description: splitParas(descrP2), image: undefined, _img: 'b2' });
+  for (const s of Array.isArray(sections) ? sections : []) {
+    if (!s || !s.heading) continue;
+    const desc = [...(s.paragraphs || []).filter(Boolean).map(mkPara)];
+    if ((s.list || []).filter(Boolean).length) desc.push(mkList(s.list, !!s.listOrdered));
+    if (desc.length) paragraphs.push({ subtitle: s.heading, description: desc, image: undefined });
+  }
+  const validFaq = (Array.isArray(faq) ? faq : []).filter(f => f && f.question && f.answer);
+  if (validFaq.length >= 2) {
+    paragraphs.push({
+      subtitle: 'Frequently Asked Questions',
+      description: validFaq.flatMap(f => [mkHeading(f.question, 3), mkPara(f.answer)]),
+      image: undefined,
+    });
+  }
+  return paragraphs;
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Full post structure generation — title, intro, 2 H2 sections
 // ──────────────────────────────────────────────────────────────────────
 
@@ -246,6 +318,39 @@ Output ONLY the section body.`;
     return false;
   }
 
+  // Rich / deep article structure (hairstyles): Key Takeaways + body sections
+  // + step-by-step / mistakes + FAQ, in proper Strapi blocks. Body sections are
+  // tagged _img so the image pipeline knows where the 2 photos go.
+  if (siteConfig.richContent) {
+    const richParagraphs = await buildRichParagraphs({
+      brand,
+      baseRules,
+      title,
+      description,
+      subTitleP1,
+      descrP1,
+      subTitleP2,
+      descrP2,
+      disclaimerHint: siteConfig.disclaimerHint || '',
+    });
+    return {
+      title,
+      description: splitParas(description),
+      isPopular: false,
+      paragraphs: richParagraphs,
+      ads: [
+        { title: 'Example adds title', url: '' },
+        { title: 'Example adds title', url: '' },
+        { title: 'Example adds title', url: '' },
+      ],
+      firstAdBanner: { url: 'https://example.com', image: undefined },
+      secondAdBanner: { url: 'https://example.com', image: undefined },
+      [siteConfig.authorField]: siteConfig.defaultAuthor,
+      [siteConfig.categoryField]: categoryId,
+      image: undefined,
+    };
+  }
+
   return {
     title,
     description: [{ type: 'paragraph', children: [{ type: 'text', text: description }] }],
@@ -381,8 +486,35 @@ Crop: medium-wide, framed for a footer banner.`,
   ];
 }
 
+// Rich image prompts: 3 FULL-frame photos (hero + 2 body sections). No empty
+// "negative space for overlay", no text/logos — fixes the previous images that
+// had awkward blank areas. Used only when siteConfig.richContent === true.
+function buildImagePromptsRich(siteConfig, globalObj) {
+  const { imageStyle } = siteConfig;
+  const title = globalObj.title;
+  const flat = blocks => (blocks || []).flatMap(b => (b.children || []).map(c => c.text || '')).join(' ');
+  const b1 = globalObj.paragraphs.find(p => p._img === 'b1');
+  const b2 = globalObj.paragraphs.find(p => p._img === 'b2');
+  const rules = `Style: ultra-realistic editorial photograph, 50mm DSLR, natural soft lighting, shallow depth of field, photojournalism aesthetic. Composition: rule of thirds, eye-level, warm midtones, a FULL well-composed frame that fills the image edge to edge — NO blank walls, empty dead space, borders, text, captions, logos or watermarks. No distorted hands or faces. Nobody who looks under 50.
+Site context: ${imageStyle.context}
+Colour and mood palette: ${imageStyle.palette}
+Hair is the visual anchor.`;
+  return [
+    { prompt: `${rules}
+Scene: a magazine-cover-quality HERO photograph for the article "${title}". Subject: ${imageStyle.subjectHero} Setting: ${imageStyle.settingHero} Mood: ${imageStyle.moodHero}`, aspectRatio: '4:3', role: 'hero' },
+    { prompt: `${rules}
+Scene: an intimate close-up that illustrates "${b1?.subtitle || title}". Subject: ${imageStyle.subjectClose} Setting: ${imageStyle.settingClose} Mood: ${imageStyle.moodClose}
+For inspiration: ${flat(b1?.description).slice(0, 200)}`, aspectRatio: '4:3', role: 'b1' },
+    { prompt: `${rules}
+Scene: a wider, action-oriented photograph that illustrates "${b2?.subtitle || title}". Subject: ${imageStyle.subjectAction} Setting: ${imageStyle.settingAction} Mood: ${imageStyle.moodAction}
+For inspiration: ${flat(b2?.description).slice(0, 200)}`, aspectRatio: '4:3', role: 'b2' },
+  ];
+}
+
 export async function generateImages(siteConfig, globalObj) {
-  const prompts = buildImagePrompts(siteConfig, globalObj);
+  const prompts = siteConfig.richContent
+    ? buildImagePromptsRich(siteConfig, globalObj)
+    : buildImagePrompts(siteConfig, globalObj);
   const ids = [];
 
   for (let i = 0; i < prompts.length; i += 1) {
@@ -446,6 +578,21 @@ export function prepForPush(globalObj, ids) {
   return out;
 }
 
+// Rich mode: image ids arrive in [hero, body1, body2] order. Assign by the _img
+// tag, then strip the markers so Strapi doesn't reject an unknown field.
+export function prepForPushRich(globalObj, ids) {
+  const out = globalObj;
+  if (ids[0]) out.image = ids[0];
+  const b1 = out.paragraphs.find(s => s._img === 'b1');
+  const b2 = out.paragraphs.find(s => s._img === 'b2');
+  if (b1 && ids[1]) b1.image = ids[1];
+  if (b2 && ids[2]) b2.image = ids[2];
+  out.paragraphs.forEach(s => {
+    delete s._img;
+  });
+  return out;
+}
+
 export async function strapiPost(siteConfig, obj) {
   try {
     const res = await fetch(`${STRAPI_API_URL}/api/${siteConfig.collection}`, {
@@ -487,7 +634,9 @@ export async function generateAndPostForSite(siteConfig) {
     }
     console.log(`[${siteConfig.brandName}] images uploaded: ${imageIds.length}/5`);
 
-    const prepared = prepForPush(globalObj, imageIds);
+    const prepared = siteConfig.richContent
+      ? prepForPushRich(globalObj, imageIds)
+      : prepForPush(globalObj, imageIds);
     const posted = await strapiPost(siteConfig, prepared);
     const seconds = Math.round((Date.now() - startedAt) / 1000);
     console.log(`[${siteConfig.brandName}] posted in ${seconds}s, documentId=${posted?.data?.documentId}`);
