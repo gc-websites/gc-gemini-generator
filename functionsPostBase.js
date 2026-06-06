@@ -113,6 +113,14 @@ const mkList = (items, ordered = false) => ({
   children: (items || []).filter(Boolean).map(t => ({ type: 'list-item', children: [{ type: 'text', text: String(t) }] })),
 });
 const splitParas = t => String(t || '').split(/\n\s*\n/).map(s => s.trim()).filter(Boolean).map(mkPara);
+const mkLink = (text, url) => ({ type: 'link', url: String(url), children: [{ type: 'text', text: String(text) }] });
+const mkLinkList = items => ({
+  type: 'list',
+  format: 'unordered',
+  children: (items || [])
+    .filter(s => s && s.url && s.title)
+    .map(s => ({ type: 'list-item', children: [mkLink(s.title, s.url)] })),
+});
 
 // Gemini call that returns parsed JSON (tolerant to code fences / stray prose).
 async function geminiJSON(prompt, fallback) {
@@ -127,29 +135,71 @@ async function geminiJSON(prompt, fallback) {
 }
 
 async function buildRichParagraphs(ctx) {
-  const { brand, baseRules, title, description, subTitleP1, descrP1, subTitleP2, descrP2, disclaimerHint } = ctx;
+  const { brand, baseRules, title, description, subTitleP1, descrP1, subTitleP2, descrP2, disclaimerHint, cfg = {} } = ctx;
+
+  // Site-aware wording. Every default below reproduces the original hairstyles
+  // prompt/label byte-for-byte, so hairstyles (and any non-overriding site)
+  // output is unchanged; other sites override via siteConfig fields.
+  const editorPersona = cfg.richEditorPersona || 'senior hair-care editor';
+  const writerPersona = cfg.richWriterPersona || 'expert hair-care writer';
+  const faqPersona = cfg.richFaqPersona || 'hair-care expert';
+  const sectionShapes =
+    cfg.richSectionShapes ||
+    'a numbered step-by-step how-to; "Common Mistakes to Avoid"; "Adjusting for Your Hair Type or Face Shape"';
+  const faqReferral =
+    cfg.richFaqReferral ||
+    'Where the answer touches scalp conditions, significant hair loss or medication, add a warm one-line "see a dermatologist" note.';
+  const labels = cfg.richLabels || {};
+  const labelTakeaways = labels.keyTakeaways || 'Key Takeaways';
+  const labelFaq = labels.faq || 'Frequently Asked Questions';
 
   const takeaways = await geminiJSON(
-    `You are a senior hair-care editor at ${brand}. ${baseRules}
+    `You are a ${editorPersona} at ${brand}. ${baseRules}
 Article title: "${title}". Intro: "${description.slice(0, 300)}".
-Write 4-5 SPECIFIC, actionable "Key Takeaways" — the real points a reader should remember. Concrete (timings, amounts, techniques), never vague.
+Write 4-5 SPECIFIC, actionable "${labelTakeaways}" — the real points a reader should remember. Concrete (timings, amounts, techniques), never vague.
 Return ONLY a JSON array of strings.`, [],
   );
   const sections = await geminiJSON(
-    `You are an expert hair-care writer at ${brand}. ${baseRules}
+    `You are an ${writerPersona} at ${brand}. ${baseRules}
 Article: "${title}". It already has two body sections titled "${subTitleP1}" and "${subTitleP2}" — do NOT repeat them.
-Write 2 ADDITIONAL deep, genuinely useful sections specific to this topic. Good shapes: a numbered step-by-step how-to; "Common Mistakes to Avoid"; "Adjusting for Your Hair Type or Face Shape". Use real techniques, timings and amounts — never generic fluff. ${disclaimerHint}
+Write 2 ADDITIONAL deep, genuinely useful sections specific to this topic. Good shapes: ${sectionShapes}. Use real techniques, timings and amounts — never generic fluff. ${disclaimerHint}
 Return ONLY a JSON array of up to 2 objects, each: {"heading":"...","paragraphs":["0-2 lead sentences"],"list":["concrete step or tip","..."],"listOrdered":true_for_step_by_step_else_false}`, [],
   );
   const faq = await geminiJSON(
-    `You are a hair-care expert at ${brand}. ${baseRules}
-Article: "${title}". Write 4 real questions a reader would ask about THIS specific topic, each with a specific 2-4 sentence answer. Where the answer touches scalp conditions, significant hair loss or medication, add a warm one-line "see a dermatologist" note.
+    `You are a ${faqPersona} at ${brand}. ${baseRules}
+Article: "${title}". Write 4 real questions a reader would ask about THIS specific topic, each with a specific 2-4 sentence answer. ${faqReferral}
 Return ONLY a JSON array: [{"question":"...","answer":"..."}]`, [],
   );
 
+  // Optional credible outbound sources (per-site, e.g. YMYL/medical), rendered
+  // as real Strapi link nodes. Only runs when siteConfig.sources is set, so
+  // sites without it (hairstyles, nice-advice) are completely unchanged.
+  let sources = [];
+  if (cfg.sources) {
+    const allow = cfg.sources.domains || [];
+    const srcRaw = await geminiJSON(
+      `You are a ${faqPersona} at ${brand}. ${baseRules}
+Article: "${title}". List 3-5 CREDIBLE, real, currently-existing reference pages a reader could check on this topic. ${cfg.sources.prompt || ''}
+Rules: every source must be a real, well-known organisation or established reference (no invented URLs, no blogs, no shops, no affiliate links). Use the organisation's real domain.
+Return ONLY a JSON array: [{"title":"Organisation – Seitentitel","url":"https://..."}]`, [],
+    );
+    sources = (Array.isArray(srcRaw) ? srcRaw : [])
+      .filter(s => s && s.title && /^https?:\/\//i.test(s.url || ''))
+      .filter(s => {
+        if (!allow.length) return true;
+        try {
+          const host = new URL(s.url).hostname.replace(/^www\./, '');
+          return allow.some(d => host === d || host.endsWith('.' + d));
+        } catch {
+          return false;
+        }
+      })
+      .slice(0, 5);
+  }
+
   const paragraphs = [];
   if (Array.isArray(takeaways) && takeaways.filter(Boolean).length >= 2) {
-    paragraphs.push({ subtitle: 'Key Takeaways', description: [mkList(takeaways)], image: undefined });
+    paragraphs.push({ subtitle: labelTakeaways, description: [mkList(takeaways)], image: undefined });
   }
   paragraphs.push({ subtitle: subTitleP1, description: splitParas(descrP1), image: undefined, _img: 'b1' });
   paragraphs.push({ subtitle: subTitleP2, description: splitParas(descrP2), image: undefined, _img: 'b2' });
@@ -162,8 +212,23 @@ Return ONLY a JSON array: [{"question":"...","answer":"..."}]`, [],
   const validFaq = (Array.isArray(faq) ? faq : []).filter(f => f && f.question && f.answer);
   if (validFaq.length >= 2) {
     paragraphs.push({
-      subtitle: 'Frequently Asked Questions',
+      subtitle: labelFaq,
       description: validFaq.flatMap(f => [mkHeading(f.question, 3), mkPara(f.answer)]),
+      image: undefined,
+    });
+  }
+  if (cfg.sources && sources.length >= 2) {
+    const intro = cfg.sources.intro ? [mkPara(cfg.sources.intro)] : [];
+    paragraphs.push({
+      subtitle: cfg.sources.label || 'Sources',
+      description: [...intro, mkLinkList(sources)],
+      image: undefined,
+    });
+  }
+  if (cfg.medicalDisclaimerBlock) {
+    paragraphs.push({
+      subtitle: cfg.medicalDisclaimerLabel || 'Hinweis',
+      description: [mkPara(cfg.medicalDisclaimerBlock)],
       image: undefined,
     });
   }
@@ -332,6 +397,7 @@ Output ONLY the section body.`;
       subTitleP2,
       descrP2,
       disclaimerHint: siteConfig.disclaimerHint || '',
+      cfg: siteConfig,
     });
     return {
       title,
@@ -495,10 +561,13 @@ function buildImagePromptsRich(siteConfig, globalObj) {
   const flat = blocks => (blocks || []).flatMap(b => (b.children || []).map(c => c.text || '')).join(' ');
   const b1 = globalObj.paragraphs.find(p => p._img === 'b1');
   const b2 = globalObj.paragraphs.find(p => p._img === 'b2');
-  const rules = `Style: ultra-realistic editorial photograph, 50mm DSLR, natural soft lighting, shallow depth of field, photojournalism aesthetic. Composition: rule of thirds, eye-level, warm midtones, a FULL well-composed frame that fills the image edge to edge — NO blank walls, empty dead space, borders, text, captions, logos or watermarks. No distorted hands or faces. Nobody who looks under 50.
+  // Site-aware; defaults reproduce the original hairstyles image rules verbatim.
+  const peopleLine = imageStyle.peopleConstraint || 'Nobody who looks under 50.';
+  const anchorLine = imageStyle.anchorLine || 'Hair is the visual anchor.';
+  const rules = `Style: ultra-realistic editorial photograph, 50mm DSLR, natural soft lighting, shallow depth of field, photojournalism aesthetic. Composition: rule of thirds, eye-level, warm midtones, a FULL well-composed frame that fills the image edge to edge — NO blank walls, empty dead space, borders, text, captions, logos or watermarks. No distorted hands or faces. ${peopleLine}
 Site context: ${imageStyle.context}
 Colour and mood palette: ${imageStyle.palette}
-Hair is the visual anchor.`;
+${anchorLine}`;
   return [
     { prompt: `${rules}
 Scene: a magazine-cover-quality HERO photograph for the article "${title}". Subject: ${imageStyle.subjectHero} Setting: ${imageStyle.settingHero} Mood: ${imageStyle.moodHero}`, aspectRatio: '4:3', role: 'hero' },
