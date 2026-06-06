@@ -134,6 +134,36 @@ async function geminiJSON(prompt, fallback) {
   }
 }
 
+// Verify a URL actually resolves (no 404) so we never ship broken citations on
+// a YMYL/medical site. HEAD first, GET fallback for servers that reject HEAD.
+async function urlOk(url, timeoutMs = 12000) {
+  const ua = 'Mozilla/5.0 (compatible; CholesterinTippsBot/1.0)';
+  const tryFetch = async method => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        method,
+        redirect: 'follow',
+        signal: ctrl.signal,
+        headers: { 'User-Agent': ua },
+      });
+      return res.status;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  try {
+    let status = await tryFetch('HEAD');
+    if (status === 403 || status === 405 || status === 501 || !status) {
+      status = await tryFetch('GET');
+    }
+    return status >= 200 && status < 400;
+  } catch {
+    return false;
+  }
+}
+
 async function buildRichParagraphs(ctx) {
   const { brand, baseRules, title, description, subTitleP1, descrP1, subTitleP2, descrP2, disclaimerHint, cfg = {} } = ctx;
 
@@ -179,11 +209,11 @@ Return ONLY a JSON array: [{"question":"...","answer":"..."}]`, [],
     const allow = cfg.sources.domains || [];
     const srcRaw = await geminiJSON(
       `You are a ${faqPersona} at ${brand}. ${baseRules}
-Article: "${title}". List 3-5 CREDIBLE, real, currently-existing reference pages a reader could check on this topic. ${cfg.sources.prompt || ''}
-Rules: every source must be a real, well-known organisation or established reference (no invented URLs, no blogs, no shops, no affiliate links). Use the organisation's real domain.
+Article: "${title}". List 7-9 CREDIBLE, real, currently-existing reference pages a reader could check on this topic (more is better — several will be filtered out). ${cfg.sources.prompt || ''}
+Rules: every source must be a real, well-known organisation or established reference (no invented URLs, no blogs, no shops, no affiliate links). Use the organisation's real domain. PREFER the stable overview / topic landing page you are confident exists (often the domain's main topic page) over deep article URLs you might be guessing.
 Return ONLY a JSON array: [{"title":"Organisation – Seitentitel","url":"https://..."}]`, [],
     );
-    sources = (Array.isArray(srcRaw) ? srcRaw : [])
+    const candidates = (Array.isArray(srcRaw) ? srcRaw : [])
       .filter(s => s && s.title && /^https?:\/\//i.test(s.url || ''))
       .filter(s => {
         if (!allow.length) return true;
@@ -193,8 +223,17 @@ Return ONLY a JSON array: [{"title":"Organisation – Seitentitel","url":"https:
         } catch {
           return false;
         }
-      })
+      });
+    // Drop any link that doesn't actually resolve (Gemini sometimes guesses a
+    // plausible-but-404 deep path). Broken citations are an E-E-A-T liability.
+    const checked = await Promise.all(
+      candidates.map(async s => ({ s, ok: await urlOk(s.url) })),
+    );
+    sources = checked
+      .filter(c => c.ok)
+      .map(c => c.s)
       .slice(0, 5);
+    console.log(`[sources] ${candidates.length} candidates → ${sources.length} resolve`);
   }
 
   const paragraphs = [];
