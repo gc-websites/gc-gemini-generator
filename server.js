@@ -686,6 +686,7 @@ server.post('/track-click', async (req, res) => {
       utm_source,
       utm_medium,
       utm_campaign,
+      utm_campaign_name,
       utm_term,
       utm_content,
       screen_width,
@@ -726,6 +727,7 @@ server.post('/track-click', async (req, res) => {
         utm_source: utm_source || null,
         utm_medium: utm_medium || null,
         utm_campaign: utm_campaign || null,
+        utm_campaign_name: utm_campaign_name || null,
         utm_term: utm_term || null,
         utm_content: utm_content || null,
         client_ip: ip || null,
@@ -777,7 +779,7 @@ server.post('/track-click', async (req, res) => {
     // the browser pixel via the shared tt_event_id). tt_event_id now rides on the
     // conversion event (the first ad view). Fire-and-forget — never blocks.
     if (tt_event_id) {
-      const ttEvent = tt_event || 'CompletePayment';
+      const ttEvent = tt_event || 'Purchase';
       const numTtValue =
         tt_value != null && tt_value !== '' && !Number.isNaN(Number(tt_value))
           ? Number(tt_value)
@@ -823,6 +825,7 @@ server.post('/track-click', async (req, res) => {
             utm_source: utm_source || null,
             utm_medium: utm_medium || null,
             utm_campaign: utm_campaign || null,
+            utm_campaign_name: utm_campaign_name || null,
             utm_content: utm_content || null,
             status: result.status || (result.ok ? 'ok' : 'failed'),
             response_code: result.code != null ? Number(result.code) : null,

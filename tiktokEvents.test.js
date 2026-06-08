@@ -4,7 +4,7 @@ import { buildTikTokEventBody, sendTikTokEvent } from './tiktokEvents.js';
 
 test('builds a minimal web event with ttclid/ip/ua and a dedup event_id', () => {
   const body = buildTikTokEventBody({
-    pixelId: 'PIX', event: 'CompletePayment', eventId: 'abc',
+    pixelId: 'PIX', event: 'Purchase', eventId: 'abc',
     eventTimeSec: 1700000000, url: 'https://x/y', referrer: 'https://r',
     ip: '1.2.3.4', userAgent: 'UA', ttclid: 'TT',
   });
@@ -12,7 +12,7 @@ test('builds a minimal web event with ttclid/ip/ua and a dedup event_id', () => 
   assert.equal(body.event_source_id, 'PIX');
   assert.equal(body.data.length, 1);
   const d = body.data[0];
-  assert.equal(d.event, 'CompletePayment');
+  assert.equal(d.event, 'Purchase');
   assert.equal(d.event_id, 'abc');
   assert.equal(d.event_time, 1700000000);
   assert.deepEqual(d.user, { ttclid: 'TT', ip: '1.2.3.4', user_agent: 'UA' });

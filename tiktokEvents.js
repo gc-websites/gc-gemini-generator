@@ -12,7 +12,7 @@ const TT_API_URL = 'https://business-api.tiktok.com/open_api/v1.3/event/track/';
  *
  * @param {object} p
  * @param {string} p.pixelId        TikTok pixel / event_source_id
- * @param {string} p.event          event name (e.g. "CompletePayment")
+ * @param {string} p.event          event name (e.g. "Purchase")
  * @param {string} p.eventId        dedup id shared with the browser pixel
  * @param {number} p.eventTimeSec   unix time in SECONDS
  * @param {string} [p.url]          page url where the event happened
