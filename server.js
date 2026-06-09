@@ -654,6 +654,39 @@ async function logTikTokConversion(record) {
   }
 }
 
+// --- funnel_step canonical ordering + server-side backfill -------------------
+// step_order is a coarse funnel position for grouping/sorting; exact within-session
+// order still comes from ms_since_start. Gaps of 10 leave room for future steps.
+const STEP_ORDER = {
+  captcha1_shown: 10,
+  captcha1_passed: 20,
+  prelander_view: 30,
+  captcha2_shown: 40,
+  captcha2_passed: 50,
+  ad_view: 60,
+  cta_click: 70,
+  offer_view: 80,
+  outbound_click: 90,
+  page_exit: 99,
+};
+// Derive a precise funnel_step from the coarse event_type + source_url, so rows from
+// older/cached clients (or the legacy hairstyles captcha) are still labeled correctly.
+function deriveFunnelStep(eventType, sourceUrl) {
+  const s = String(sourceUrl || '');
+  const onV = s.includes('/v/');
+  const onO = s.includes('/o/');
+  switch (eventType) {
+    case 'captcha_shown': return onV ? 'captcha2_shown' : 'captcha1_shown';
+    case 'captcha_passed': return onV ? 'captcha2_passed' : 'captcha1_passed';
+    case 'prelend_view': return onO ? 'offer_view' : 'prelander_view';
+    case 'ad_view': return 'ad_view';
+    case 'cta_click': return 'cta_click';
+    case 'outbound_click': return 'outbound_click';
+    case 'page_exit': return 'page_exit';
+    default: return null;
+  }
+}
+
 server.post('/track-click', async (req, res) => {
   try {
     let ip = requestIp.getClientIp(req);
@@ -713,7 +746,25 @@ server.post('/track-click', async (req, res) => {
       scroll_depth,
       time_on_page,
       meta,
+      funnel_step,
+      step_order,
+      ui_locale,
     } = req.body;
+
+    // null-guard: drop un-stitchable / un-classifiable junk (no session or no step).
+    // Returns 200 so the client beacon isn't retried, but nothing is written to Strapi.
+    if (!session_id || !event_type) {
+      return res.status(200).json({ ok: true, skipped: 'missing session_id or event_type' });
+    }
+
+    // Precise funnel step + canonical order (backfilled when the client omits funnel_step).
+    const resolvedStep = funnel_step || deriveFunnelStep(event_type, source_url);
+    const resolvedOrder =
+      step_order != null
+        ? Number(step_order)
+        : resolvedStep && STEP_ORDER[resolvedStep] != null
+          ? STEP_ORDER[resolvedStep]
+          : null;
 
     const payload = {
       data: {
@@ -734,6 +785,9 @@ server.post('/track-click', async (req, res) => {
         user_agent: userAgent || null,
         country: country || null,
         device_type: deviceType,
+        funnel_step: resolvedStep || null,
+        step_order: resolvedOrder,
+        ui_locale: ui_locale || locale || null,
         screen_width: screen_width || null,
         screen_height: screen_height || null,
         clicked_at: clicked_at || new Date().toISOString(),
