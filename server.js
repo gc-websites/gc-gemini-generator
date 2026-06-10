@@ -15,6 +15,7 @@ import { runAutoCommenter, formatReportForTelegram } from './autoCommenter.js';
 import { attachForumRoutes } from './forumRoutes.js';
 import { seedPersonas, genThreadSafe, genReplySafe, seedForum, seedForumQuick, fillRepliesOnExistingThreads, fillCannedReplies, fillCannedThreads } from './functionsForum.js';
 import { sendTikTokEvent } from './tiktokEvents.js';
+import { sendMetaEvent } from './metaEvents.js';
 
 const server = express();
 const PORT = process.env.PORT || 4000;
@@ -31,6 +32,13 @@ const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
 const TT_TOKEN = process.env.TT_TOKEN;
 const TT_PIXEL_ID = process.env.TT_PIXEL_ID || 'CGUJ36RC77U0HA6062A0';
 const TT_TEST_EVENT_CODE = process.env.TT_TEST_EVENT_CODE;
+
+// Meta Conversions API (server-side). Token is the secret (in .env as FB_TOKEN);
+// pixel id comes from .env (FB_PIXEL_ID) or, as a fallback, from the ad URL's
+// fb_pixel param the browser forwarded. Test code is optional.
+const FB_TOKEN = process.env.FB_TOKEN;
+const FB_PIXEL_ID = process.env.FB_PIXEL_ID;
+const FB_TEST_EVENT_CODE = process.env.FB_TEST_EVENT_CODE;
 
 const corsOptions = {
   origin: [
@@ -654,6 +662,25 @@ async function logTikTokConversion(record) {
   }
 }
 
+async function logFbConversion(record) {
+  try {
+    const r = await fetch(`${STRAPI_API_URL}/api/fb-conversions`, {
+      method: 'POST',
+      headers: {
+        Authorization: STRAPI_TOKEN,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ data: record }),
+    });
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      console.error('❌ fb-conversion log rejected:', r.status, txt.slice(0, 500));
+    }
+  } catch (err) {
+    console.error('❌ fb-conversion log error:', err.message);
+  }
+}
+
 // --- funnel_step canonical ordering + server-side backfill -------------------
 // step_order is a coarse funnel position for grouping/sorting; exact within-session
 // order still comes from ms_since_start. Gaps of 10 leave room for future steps.
@@ -736,6 +763,12 @@ server.post('/track-click', async (req, res) => {
       fbclid,
       fb_pixel,
       fb_event,
+      fb_event_id,
+      fbc,
+      fbp,
+      fb_value,
+      fb_currency,
+      fb_content_id,
       fb_pixel_mode,
       fb_fire_type,
       page_url,
@@ -807,6 +840,7 @@ server.post('/track-click', async (req, res) => {
         fbclid: fbclid || null,
         fb_pixel: fb_pixel || null,
         fb_event: fb_event || null,
+        fb_event_id: fb_event_id || null,
         fb_pixel_mode: fb_pixel_mode || null,
         fb_fire_type: fb_fire_type || null,
         platform: platform || null,
@@ -903,6 +937,74 @@ server.post('/track-click', async (req, res) => {
           })
         )
         .catch((err) => console.error('❌ TikTok send/log chain error:', err?.message || err));
+    }
+
+    // Forward the conversion to the Meta Conversions API (server-side; deduped with
+    // the browser fbq via the shared fb_event_id, which rides ONLY the conversion
+    // event — the first ad view, see fbConversion.ts). Fire-and-forget — never blocks.
+    if (fb_event_id) {
+      const fbEventName = fb_event || 'Purchase';
+      const fbPixelUsed = FB_PIXEL_ID || fb_pixel || null;
+      const numFbValue =
+        fb_value != null && fb_value !== '' && !Number.isNaN(Number(fb_value))
+          ? Number(fb_value)
+          : null;
+      sendMetaEvent(
+        {
+          event: fbEventName,
+          eventId: fb_event_id,
+          eventTimeSec: Math.floor(Date.now() / 1000),
+          url: page_url || (source_url ? `https://nice-advice.info${source_url}` : undefined),
+          ip,
+          userAgent,
+          fbc,
+          fbp,
+          fbclid,
+          value: fb_value,
+          currency: fb_currency,
+          contentId: fb_content_id,
+        },
+        { token: FB_TOKEN, pixelId: fbPixelUsed, testEventCode: FB_TEST_EVENT_CODE }
+      )
+        // Mirror the send into Strapi `fb-conversion` (what was sent + Meta's
+        // response). Fire-and-forget — never blocks the response or the user.
+        .then((result) =>
+          logFbConversion({
+            session_id: session_id || null,
+            event: fbEventName,
+            event_id: fb_event_id,
+            pixel_id: fbPixelUsed,
+            fbclid: fbclid || null,
+            fbc: fbc || null,
+            fbp: fbp || null,
+            value: numFbValue,
+            currency: fb_currency || null,
+            content_id: fb_content_id || null,
+            client_ip: ip || null,
+            user_agent: userAgent || null,
+            country: country || null,
+            device_type: deviceType || null,
+            page_url: page_url || null,
+            source_url: source_url || null,
+            referrer: referrer || null,
+            prelend_slug: prelend_slug || null,
+            ui_locale: ui_locale || locale || null,
+            platform: platform || null,
+            utm_source: utm_source || null,
+            utm_medium: utm_medium || null,
+            utm_campaign: utm_campaign || null,
+            utm_campaign_name: utm_campaign_name || null,
+            utm_content: utm_content || null,
+            status: result.status || (result.ok ? 'ok' : 'failed'),
+            response_code: result.code != null ? Number(result.code) : null,
+            response_message:
+              result.message || result.error || (result.skipped ? `skipped:${result.skipped}` : null),
+            test_event_code: FB_TEST_EVENT_CODE || null,
+            request_body: result.requestBody || null,
+            sent_at: new Date().toISOString(),
+          })
+        )
+        .catch((err) => console.error('❌ Meta send/log chain error:', err?.message || err));
     }
 
     res.status(200).json({ ok: true });
