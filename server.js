@@ -33,12 +33,13 @@ const TT_TOKEN = process.env.TT_TOKEN;
 const TT_PIXEL_ID = process.env.TT_PIXEL_ID || 'CGUJ36RC77U0HA6062A0';
 const TT_TEST_EVENT_CODE = process.env.TT_TEST_EVENT_CODE;
 
-// Meta Conversions API (server-side). Token is the secret (in .env as FB_TOKEN);
-// pixel id comes from .env (FB_PIXEL_ID) or, as a fallback, from the ad URL's
-// fb_pixel param the browser forwarded. Test code is optional.
-const FB_TOKEN = process.env.FB_TOKEN;
-const FB_PIXEL_ID = process.env.FB_PIXEL_ID;
-const FB_TEST_EVENT_CODE = process.env.FB_TEST_EVENT_CODE;
+// Meta Conversions API for the FUNNEL (server-side). Deliberately namespaced
+// FB_FUNNEL_* — the legacy leads pipeline (functionsForTracking.js) already owns
+// FB_PIXEL_ID/FB_ACCESS_TOKEN in this .env for a DIFFERENT pixel. Pixel id falls
+// back to the ad URL's fb_pixel param the browser forwarded. Test code optional.
+const FB_TOKEN = process.env.FB_FUNNEL_TOKEN;
+const FB_PIXEL_ID = process.env.FB_FUNNEL_PIXEL_ID;
+const FB_TEST_EVENT_CODE = process.env.FB_FUNNEL_TEST_EVENT_CODE;
 
 const corsOptions = {
   origin: [
