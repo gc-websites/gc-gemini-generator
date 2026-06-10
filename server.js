@@ -663,9 +663,14 @@ const STEP_ORDER = {
   prelander_view: 30,
   captcha2_shown: 40,
   captcha2_passed: 50,
-  ad_view: 60,
+  ad_view: 60, // legacy/unknown slot
+  ad_view_v_top: 61, // /v/ slot 4020462057
   cta_click: 70,
   offer_view: 80,
+  ad_view_o_top: 81, // /o/ slot 9081217047
+  ad_view_o_mid1: 82, // /o/ slot 8220091745 (after 1st paragraph)
+  ad_view_o_mid2: 83, // /o/ slot 3800970206 (after intro block)
+  ad_view_o: 84, // legacy /o/ ad_view without a slot step
   outbound_click: 90,
   page_exit: 99,
 };
@@ -679,7 +684,9 @@ function deriveFunnelStep(eventType, sourceUrl) {
     case 'captcha_shown': return onV ? 'captcha2_shown' : 'captcha1_shown';
     case 'captcha_passed': return onV ? 'captcha2_passed' : 'captcha1_passed';
     case 'prelend_view': return onO ? 'offer_view' : 'prelander_view';
-    case 'ad_view': return 'ad_view';
+    // /v/ has exactly one slot so the page alone pins it; /o/ has 3 slots — without
+    // an explicit funnel_step from the client we can only say "some /o/ ad".
+    case 'ad_view': return onV ? 'ad_view_v_top' : onO ? 'ad_view_o' : 'ad_view';
     case 'cta_click': return 'cta_click';
     case 'outbound_click': return 'outbound_click';
     case 'page_exit': return 'page_exit';
@@ -758,7 +765,12 @@ server.post('/track-click', async (req, res) => {
     }
 
     // Precise funnel step + canonical order (backfilled when the client omits funnel_step).
-    const resolvedStep = funnel_step || deriveFunnelStep(event_type, source_url);
+    // A generic 'ad_view' from older/cached clients is upgraded to the per-page step too.
+    const resolvedStep =
+      (funnel_step && funnel_step !== 'ad_view' ? funnel_step : null) ||
+      deriveFunnelStep(event_type, source_url) ||
+      funnel_step ||
+      null;
     const resolvedOrder =
       step_order != null
         ? Number(step_order)
