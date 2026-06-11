@@ -6,6 +6,21 @@
 
 const TT_API_URL = 'https://business-api.tiktok.com/open_api/v1.3/event/track/';
 
+// Last line of defense: never send a fake click id to TikTok. Literal template
+// macros (__CLICKID__ — not even a valid TikTok macro) and param-name echoes
+// come from ad previews/scanners/misconfigured URLs; a fake ttclid actively
+// breaks attribution, an absent one just falls back to ip+ua matching.
+export function isRealClickId(v) {
+  if (!v) return false;
+  // anchored to the WHOLE value: macros always arrive as the entire param;
+  // a real base64url fbclid could legally contain an embedded "__x__" run
+  if (/^__[A-Za-z0-9_]+__$/.test(v)) return false;
+  if (v.includes('{{') || v.includes('}}')) return false;
+  const lower = String(v).toLowerCase();
+  if (lower === 'ttclid' || lower === 'fbclid' || lower === 'gclid' || lower === 'clickid') return false;
+  return true;
+}
+
 /**
  * Build the TikTok Events API request body from a /track-click conversion.
  * Pure function (no network) so it can be unit-tested.
@@ -27,7 +42,7 @@ const TT_API_URL = 'https://business-api.tiktok.com/open_api/v1.3/event/track/';
  */
 export function buildTikTokEventBody(p) {
   const user = {};
-  if (p.ttclid) user.ttclid = p.ttclid;
+  if (p.ttclid && isRealClickId(p.ttclid)) user.ttclid = p.ttclid;
   if (p.ip) user.ip = p.ip;
   if (p.userAgent) user.user_agent = p.userAgent;
 

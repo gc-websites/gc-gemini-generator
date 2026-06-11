@@ -8,6 +8,8 @@
 // fbc comes from the _fbc cookie when the pixel set it, otherwise it is built
 // from the raw fbclid (fb.1.<now_ms>.<fbclid>) — both are accepted by Meta.
 
+import { isRealClickId } from './tiktokEvents.js';
+
 const GRAPH_VERSION = 'v21.0';
 
 /**
@@ -33,7 +35,10 @@ export function buildMetaEventBody(p) {
   const user_data = {};
   if (p.ip) user_data.client_ip_address = p.ip;
   if (p.userAgent) user_data.client_user_agent = p.userAgent;
-  const fbc = p.fbc || (p.fbclid ? `fb.1.${Date.now()}.${p.fbclid}` : '');
+  // Never build fbc from a fake fbclid (literal {{macro}} / "fbclid" echoes
+  // from scanners) — a junk fbc hurts match quality more than no fbc.
+  const realFbclid = isRealClickId(p.fbclid) ? p.fbclid : '';
+  const fbc = p.fbc || (realFbclid ? `fb.1.${Date.now()}.${realFbclid}` : '');
   if (fbc) user_data.fbc = fbc;
   if (p.fbp) user_data.fbp = p.fbp;
 
