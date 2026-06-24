@@ -86,6 +86,35 @@ function bindHash(ip, ua) {
 let logDecision = () => {};
 export function __setLogger(fn) { logDecision = fn; }
 
+// Map one anti-fraud decision to a Strapi `click-event` row. Reuses the existing
+// content type (no schema change): event_type tags the row as a decision and the
+// score/band/reasons ride along in meta.
+export function buildAfLogRow({ sid, step, score, reasons, band, ip }) {
+  return {
+    data: {
+      session_id: sid || null,
+      event_type: 'af_decision',
+      funnel_step: `af_${step}`,
+      client_ip: ip || null,
+      meta: { score, band, reasons },
+      clicked_at: new Date().toISOString(),
+    },
+  };
+}
+
+// Install the real Strapi sink. The env is read at call time (not module load),
+// because server.js runs dotenv.config() AFTER importing this module — checking at
+// import time would always see unset env and silently never log. In unit tests
+// STRAPI_API_URL/STRAPI_TOKEN are unset, so this stays a no-op (no network).
+__setLogger((d) => {
+  if (!process.env.STRAPI_API_URL || !process.env.STRAPI_TOKEN) return;
+  fetch(`${process.env.STRAPI_API_URL}/api/click-events`, {
+    method: 'POST',
+    headers: { Authorization: process.env.STRAPI_TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildAfLogRow(d)),
+  }).catch((e) => console.error('af log error:', e.message));
+});
+
 export function shouldForwardConversion({ afToken, enforce, secret, thresholds = {} }) {
   if (!enforce) return true;            // observe / kill-switch → never block
   const v = verifyToken(afToken, secret);
