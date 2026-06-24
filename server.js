@@ -16,6 +16,7 @@ import { attachForumRoutes } from './forumRoutes.js';
 import { seedPersonas, genThreadSafe, genReplySafe, seedForum, seedForumQuick, fillRepliesOnExistingThreads, fillCannedReplies, fillCannedThreads } from './functionsForum.js';
 import { sendTikTokEvent } from './tiktokEvents.js';
 import { sendMetaEvent } from './metaEvents.js';
+import { attachAntifraudRoutes } from './antifraud/index.js';
 
 const server = express();
 const PORT = process.env.PORT || 4000;
@@ -58,6 +59,9 @@ const corsOptions = {
     'https://www.hairstylesforseniors.com',
     'https://suggestionoftheday.com',
     'https://www.suggestionoftheday.com',
+    // captcha1 entry domain (served from AWS 63.177.79.201) — needed because
+    // /af/verify is a CORS fetch (reads the response), unlike the no-cors sendBeacon.
+    'https://captcha.nice-advice.info',
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -68,6 +72,7 @@ server.use(cors(corsOptions));
 server.set('trust proxy', true);
 
 attachForumRoutes(server);
+attachAntifraudRoutes(server);
 
 const bot = createTelegramBot(TG_TOKEN);
 
