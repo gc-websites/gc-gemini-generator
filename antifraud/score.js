@@ -19,6 +19,9 @@ export function scoreSignals({ ua = '', signals = {}, velocity = 1 } = {}) {
   // --- Honeypot (humans never fill the hidden field) ---
   if (signals.honeypot) add(-50, 'honeypot_filled');
 
+  // --- Self-declared bot (captcha1 keeps an "I am a robot" button) ---
+  if (signals.robotBtn === true) add(-60, 'self_declared_robot');
+
   // --- Interaction realism ---
   const t = Number(signals.timeToInteractMs);
   if (Number.isFinite(t)) {

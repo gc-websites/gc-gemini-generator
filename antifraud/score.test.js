@@ -46,3 +46,11 @@ test('elevated velocity (8<v<=20) lowers score and is flagged', () => {
   assert.ok(elevated.score < base.score);
   assert.ok(elevated.reasons.includes('elevated_velocity'));
 });
+
+test('clicking the "I am a robot" button is a strong, explicit bot signal', () => {
+  const human = scoreSignals({ ua: 'Mozilla/5.0 (iPhone)', signals: { jsProof: true, robotBtn: false } });
+  const robot = scoreSignals({ ua: 'Mozilla/5.0 (iPhone)', signals: { jsProof: true, robotBtn: true } });
+  assert.ok(robot.score < human.score, `robot ${robot.score} should be < human ${human.score}`);
+  assert.ok(robot.reasons.includes('self_declared_robot'));
+  assert.ok(robot.score < 40, `expected <40, got ${robot.score}`);
+});
