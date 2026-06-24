@@ -16,7 +16,7 @@ import { attachForumRoutes } from './forumRoutes.js';
 import { seedPersonas, genThreadSafe, genReplySafe, seedForum, seedForumQuick, fillRepliesOnExistingThreads, fillCannedReplies, fillCannedThreads } from './functionsForum.js';
 import { sendTikTokEvent } from './tiktokEvents.js';
 import { sendMetaEvent } from './metaEvents.js';
-import { attachAntifraudRoutes } from './antifraud/index.js';
+import { attachAntifraudRoutes, shouldForwardConversion } from './antifraud/index.js';
 
 const server = express();
 const PORT = process.env.PORT || 4000;
@@ -792,6 +792,7 @@ server.post('/track-click', async (req, res) => {
       scroll_depth,
       time_on_page,
       meta,
+      af_token,
       funnel_step,
       step_order,
       ui_locale,
@@ -881,10 +882,25 @@ server.post('/track-click', async (req, res) => {
       })
       .catch(err => console.error('❌ Click tracking Strapi error:', err.message));
 
+    const afEnforce = process.env.AF_ENFORCE === 'true';
+    const afOk = shouldForwardConversion({
+      afToken: af_token,
+      enforce: afEnforce,
+      secret: process.env.AF_HMAC_SECRET || '',
+      thresholds: {
+        CLEAN: Number(process.env.AF_THRESHOLD_CLEAN) || 70,
+        MID: Number(process.env.AF_THRESHOLD_MID) || 40,
+        AD: Number(process.env.AF_THRESHOLD_AD) || 60,
+      },
+    });
+    if (!afOk) {
+      console.log('🛡️ antifraud: conversion forward withheld for session', session_id);
+    }
+
     // Forward the conversion to the TikTok Events API (server-side; deduped with
     // the browser pixel via the shared tt_event_id). tt_event_id now rides on the
     // conversion event (the first ad view). Fire-and-forget — never blocks.
-    if (tt_event_id) {
+    if (afOk && tt_event_id) {
       const ttEvent = tt_event || 'Purchase';
       const numTtValue =
         tt_value != null && tt_value !== '' && !Number.isNaN(Number(tt_value))
@@ -948,7 +964,7 @@ server.post('/track-click', async (req, res) => {
     // Forward the conversion to the Meta Conversions API (server-side; deduped with
     // the browser fbq via the shared fb_event_id, which rides ONLY the conversion
     // event — the first ad view, see fbConversion.ts). Fire-and-forget — never blocks.
-    if (fb_event_id) {
+    if (afOk && fb_event_id) {
       const fbEventName = fb_event || 'Purchase';
       const fbPixelUsed = FB_PIXEL_ID || fb_pixel || null;
       const numFbValue =

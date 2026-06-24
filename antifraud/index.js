@@ -85,3 +85,10 @@ function bindHash(ip, ua) {
 // Replaced with a real Strapi sink in Task 7; no-op so unit tests stay isolated.
 let logDecision = () => {};
 export function __setLogger(fn) { logDecision = fn; }
+
+export function shouldForwardConversion({ afToken, enforce, secret, thresholds = {} }) {
+  if (!enforce) return true;            // observe / kill-switch → never block
+  const v = verifyToken(afToken, secret);
+  if (!v.valid) return false;
+  return decide({ score: v.payload.score, steps: v.payload.steps || [] }, thresholds).forwardConversion;
+}
