@@ -59,9 +59,6 @@ const corsOptions = {
     'https://www.hairstylesforseniors.com',
     'https://suggestionoftheday.com',
     'https://www.suggestionoftheday.com',
-    // captcha1 entry domain (served from AWS 63.177.79.201) — needed because
-    // /af/verify is a CORS fetch (reads the response), unlike the no-cors sendBeacon.
-    'https://captcha.nice-advice.info',
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

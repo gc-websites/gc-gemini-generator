@@ -6,6 +6,7 @@ import requestIp from 'request-ip';
 
 process.env.AF_HMAC_SECRET = 'routes-test-secret';
 process.env.AF_ENFORCE = 'true';
+process.env.AF_NONCE_BUDGET = '2';
 const { attachAntifraudRoutes } = await import('./index.js');
 
 let server, base;
@@ -48,12 +49,14 @@ test('gate allows a clean cap1+cap2 token and denies a cap1-only token', async (
   assert.equal(gateOne.allow, false);
 });
 
-test('a replayed token nonce is rejected at gate', async () => {
-  const a = await post('/af/verify', { sid: 's4', step: 'cap1', signals: { jsProof: true, touchEvents: 5, timeToInteractMs: 2000 } });
-  const b = await post('/af/verify', { sid: 's4', step: 'cap2', prevToken: a.token, signals: { jsProof: true, touchEvents: 5, timeToInteractMs: 2000 } });
-  const first = await post('/af/gate', { token: b.token });
-  const second = await post('/af/gate', { token: b.token });
-  assert.equal(first.allow, true);
-  assert.equal(second.allow, false);
-  assert.equal(second.reason, 'replay');
+test('nonce budget: gate allows up to AF_NONCE_BUDGET calls then denies as replay', async () => {
+  const a = await post('/af/verify', { sid: 's5', step: 'cap1', signals: { jsProof: true, touchEvents: 5, timeToInteractMs: 2000 } });
+  const b = await post('/af/verify', { sid: 's5', step: 'cap2', prevToken: a.token, signals: { jsProof: true, touchEvents: 5, timeToInteractMs: 2000 } });
+  const g1 = await post('/af/gate', { token: b.token });
+  const g2 = await post('/af/gate', { token: b.token });
+  const g3 = await post('/af/gate', { token: b.token });
+  assert.equal(g1.allow, true);
+  assert.equal(g2.allow, true);
+  assert.equal(g3.allow, false);
+  assert.equal(g3.reason, 'replay');
 });

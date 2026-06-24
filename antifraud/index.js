@@ -4,7 +4,7 @@ import { nanoid } from 'nanoid';
 import { signToken, verifyToken } from './token.js';
 import { scoreSignals } from './score.js';
 import { decide } from './decide.js';
-import { hit, seenNonce } from './store.js';
+import { hit, bumpNonce } from './store.js';
 
 const TOKEN_TTL_S = 30 * 60;
 
@@ -15,6 +15,7 @@ const thresholds = () => ({
   MID: Number(process.env.AF_THRESHOLD_MID) || 40,
   AD: Number(process.env.AF_THRESHOLD_AD) || 60,
 });
+const nonceBudget = () => Number(process.env.AF_NONCE_BUDGET) || 12;
 
 function clientIp(req) {
   let ip = requestIp.getClientIp(req) || '';
@@ -66,14 +67,11 @@ export function attachAntifraudRoutes(server) {
       if (!v.valid) {
         return res.json({ allow: !enforce(), reason: v.reason || 'invalid', enforce: enforce() });
       }
-      // Nonce replay defense is only consumed in ENFORCE mode. In observe mode we
-      // must NOT consume it: the funnel renders several ad slots per token
-      // (na_v_top + na_o_top/mid1/mid2), each calling /af/gate with the SAME token,
-      // so consuming here would mark legitimate later slots as "replay" and pollute
-      // the calibration logs. NOTE (enforce-phase): the spec (§4.1A / §10) mandates a
-      // nonce *budget* (N gate-calls per token), not single-use — implement the budget
-      // before flipping AF_ENFORCE=true, or multi-slot pages will self-deny their ads.
-      if (enforce() && seenNonce(v.payload.nonce)) {
+      // Per-token nonce BUDGET: the funnel gates several ad slots with one token
+      // (na_v_top + na_o_top/mid1/mid2 + reloads), so allow up to AF_NONCE_BUDGET
+      // gate calls per token; beyond that it's replay/abuse. Only consumed under
+      // enforce (observe never bumps, keeping calibration logs clean).
+      if (enforce() && bumpNonce(v.payload.nonce) > nonceBudget()) {
         return res.json({ allow: false, reason: 'replay', enforce: true });
       }
       // NOTE: token `bind` (ip/ua) is intentionally a SOFT signal — not hard-checked

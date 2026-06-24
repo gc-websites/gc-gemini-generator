@@ -12,10 +12,10 @@ export function hit(key) {
   return n;
 }
 
-export function seenNonce(nonce) {
-  if (nonces.has(nonce)) return true;
-  nonces.set(nonce, 1);
-  return false;
+export function bumpNonce(nonce) {
+  const n = (nonces.get(nonce) || 0) + 1;
+  nonces.set(nonce, n);
+  return n;
 }
 
 export function __reset() {
