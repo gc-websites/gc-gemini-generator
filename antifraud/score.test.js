@@ -39,3 +39,10 @@ test('score is always clamped to 0..100', () => {
   const { score } = scoreSignals({ ua: '', signals: { honeypot: 'x', jsProof: false }, velocity: 999 });
   assert.ok(score >= 0 && score <= 100);
 });
+
+test('elevated velocity (8<v<=20) lowers score and is flagged', () => {
+  const base = scoreSignals({ ua: 'Mozilla/5.0 (iPhone)', signals: { jsProof: true }, velocity: 1 });
+  const elevated = scoreSignals({ ua: 'Mozilla/5.0 (iPhone)', signals: { jsProof: true }, velocity: 12 });
+  assert.ok(elevated.score < base.score);
+  assert.ok(elevated.reasons.includes('elevated_velocity'));
+});

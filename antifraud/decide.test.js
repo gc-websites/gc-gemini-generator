@@ -33,3 +33,11 @@ test('custom thresholds are honored', () => {
   assert.equal(d.band, 'clean');
   assert.equal(d.allowAd, true);
 });
+
+test('mid-band (60-69) with both captchas: ad allowed AND challenged (AD<CLEAN overlap)', () => {
+  const d = decide({ score: 65, steps: BOTH });
+  assert.equal(d.band, 'mid');
+  assert.equal(d.allowAd, true);
+  assert.equal(d.challenge, true);
+  assert.equal(d.forwardConversion, true);
+});

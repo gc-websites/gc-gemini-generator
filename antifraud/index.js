@@ -66,9 +66,18 @@ export function attachAntifraudRoutes(server) {
       if (!v.valid) {
         return res.json({ allow: !enforce(), reason: v.reason || 'invalid', enforce: enforce() });
       }
-      if (seenNonce(v.payload.nonce)) {
-        return res.json({ allow: !enforce(), reason: 'replay', enforce: enforce() });
+      // Nonce replay defense is only consumed in ENFORCE mode. In observe mode we
+      // must NOT consume it: the funnel renders several ad slots per token
+      // (na_v_top + na_o_top/mid1/mid2), each calling /af/gate with the SAME token,
+      // so consuming here would mark legitimate later slots as "replay" and pollute
+      // the calibration logs. NOTE (enforce-phase): the spec (§4.1A / §10) mandates a
+      // nonce *budget* (N gate-calls per token), not single-use — implement the budget
+      // before flipping AF_ENFORCE=true, or multi-slot pages will self-deny their ads.
+      if (enforce() && seenNonce(v.payload.nonce)) {
+        return res.json({ allow: false, reason: 'replay', enforce: true });
       }
+      // NOTE: token `bind` (ip/ua) is intentionally a SOFT signal — not hard-checked
+      // here (webview egress IPs shift); see spec §4.1A.
       const d = decide({ score: v.payload.score, steps: v.payload.steps || [] }, thresholds());
       return res.json({ allow: enforce() ? d.allowAd : true, reason: d.band, enforce: enforce() });
     } catch (e) {
