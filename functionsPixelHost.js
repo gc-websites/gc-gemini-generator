@@ -88,9 +88,12 @@ async function findCoverImage(query, imagePrefix) {
         const ir = await fetch(c.url, { headers: { "User-Agent": "Mozilla/5.0 (PixelHostGen/1.0)" }, redirect: "follow", signal: AbortSignal.timeout(30000) });
         if (!ir.ok) continue;
         const ct = (ir.headers.get("content-type") || "image/jpeg").split(";")[0];
-        if (!ct.startsWith("image/")) continue;
+        if (!ct.startsWith("image/") || ct.includes("svg")) continue;
         const buf = Buffer.from(await ir.arrayBuffer());
         if (buf.length < 30000) continue;
+        // Accept only raster formats next/image can render (reject SVG/XML/text).
+        const sig = buf.toString("latin1", 0, 12);
+        if (!((buf[0] === 0xff && buf[1] === 0xd8) || (buf[0] === 0x89 && buf[1] === 0x50) || sig.startsWith("GIF8") || (sig.startsWith("RIFF") && sig.slice(8, 12) === "WEBP"))) continue;
         const form = new FormData();
         form.append("files", new Blob([buf], { type: ct }), `${imagePrefix}-cover.${ct.includes("png") ? "png" : "jpg"}`);
         const up = await fetch(`${STRAPI_URL}/api/upload`, { method: "POST", headers: { Authorization: STRAPI_TOKEN }, body: form });
