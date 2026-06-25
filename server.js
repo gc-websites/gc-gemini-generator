@@ -10,6 +10,7 @@ import { generateAndPostCholesterin } from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
 import { generateAndPostPixelHost } from './functionsPixelHost.js';
 import { generateAndPostWpcrew } from './functionsWpcrew.js';
+import { generateAndPostUxdictionary } from './functionsUxdictionary.js';
 import { createTelegramBot } from './tgBot.js';
 import { generateCommonTitle, generateProductsArray, postMultiproductToStrapi } from './functionsForMultiproducts.js';
 import { checkSitesAvailability } from './siteChecker.js';
@@ -178,6 +179,24 @@ https://wpcrew.co/article/${wpcrewPost.slug}`,
         });
     } catch (wpcrewErr) {
       console.error('WP Crew generation error:', wpcrewErr);
+    }
+    // UX Dictionary (post6s) — isolated: its own try/catch so a failure here can
+    // never affect the sites generated above.
+    try {
+      const uxdictPost = await generateAndPostUxdictionary();
+      await bot.sendMessage(
+        ADMIN_CHAT_ID,
+        `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅UX Dictionary✅
+
+Title: ${uxdictPost.title}
+
+https://uxdictionary.io/article/${uxdictPost.slug}`,
+        {
+          disable_web_page_preview: true
+        });
+    } catch (uxdictErr) {
+      console.error('UX Dictionary generation error:', uxdictErr);
     }
     console.log('Scheduled job end:', new Date().toISOString());
   } catch (err) {
