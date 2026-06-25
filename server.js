@@ -8,6 +8,7 @@ import { generateAndPost, postUserEmail } from './functions.js';
 import { generateImg, generateProduct, postToStrapi } from './functionsForProducts.js';
 import { generateAndPostCholesterin } from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
+import { generateAndPostPixelHost } from './functionsPixelHost.js';
 import { createTelegramBot } from './tgBot.js';
 import { generateCommonTitle, generateProductsArray, postMultiproductToStrapi } from './functionsForMultiproducts.js';
 import { checkSitesAvailability } from './siteChecker.js';
@@ -141,6 +142,24 @@ https://hairstylesforseniors.com/post/${hairStylesPostId.data.documentId}`,
       {
         disable_web_page_preview: true
       });
+    // PixelHost (post4s) — isolated: its own try/catch so a failure here can
+    // never affect the three sites generated above.
+    try {
+      const pixelHostPost = await generateAndPostPixelHost();
+      await bot.sendMessage(
+        ADMIN_CHAT_ID,
+        `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅PixelHost✅
+
+Title: ${pixelHostPost.title}
+
+https://pixelhost.io/article/${pixelHostPost.slug}`,
+        {
+          disable_web_page_preview: true
+        });
+    } catch (pixelHostErr) {
+      console.error('PixelHost generation error:', pixelHostErr);
+    }
     console.log('Scheduled job end:', new Date().toISOString());
   } catch (err) {
     console.error('Scheduled job error:', err);
