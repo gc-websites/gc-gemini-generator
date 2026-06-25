@@ -9,6 +9,7 @@ import { generateImg, generateProduct, postToStrapi } from './functionsForProduc
 import { generateAndPostCholesterin } from './functionsCholesterin.js';
 import { generateAndPostHairStyles } from './functionsHairStyles.js';
 import { generateAndPostPixelHost } from './functionsPixelHost.js';
+import { generateAndPostWpcrew } from './functionsWpcrew.js';
 import { createTelegramBot } from './tgBot.js';
 import { generateCommonTitle, generateProductsArray, postMultiproductToStrapi } from './functionsForMultiproducts.js';
 import { checkSitesAvailability } from './siteChecker.js';
@@ -159,6 +160,24 @@ https://pixelhost.io/article/${pixelHostPost.slug}`,
         });
     } catch (pixelHostErr) {
       console.error('PixelHost generation error:', pixelHostErr);
+    }
+    // WP Crew (post5s) — isolated: its own try/catch so a failure here can
+    // never affect the sites generated above.
+    try {
+      const wpcrewPost = await generateAndPostWpcrew();
+      await bot.sendMessage(
+        ADMIN_CHAT_ID,
+        `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅WP Crew✅
+
+Title: ${wpcrewPost.title}
+
+https://wpcrew.co/article/${wpcrewPost.slug}`,
+        {
+          disable_web_page_preview: true
+        });
+    } catch (wpcrewErr) {
+      console.error('WP Crew generation error:', wpcrewErr);
     }
     console.log('Scheduled job end:', new Date().toISOString());
   } catch (err) {
