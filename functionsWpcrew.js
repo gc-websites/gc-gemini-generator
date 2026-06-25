@@ -27,6 +27,16 @@ const CATEGORIES = [
   { slug: "freelancing", themes: ["pricing freelance web work", "writing a winning proposal", "building a web design portfolio", "finding your first clients", "smooth client onboarding", "growing from freelancer to studio", "contracts and scoping projects"] },
 ];
 
+// Per-category image queries — used as fallbacks so an article almost always
+// gets a cover even when the specific tag-based query comes up empty.
+const QUERY_BY_CAT = {
+  "web-design": ["web design desk", "ui design screen", "designer workspace", "color palette swatches"],
+  "development": ["code editor screen", "programming laptop", "developer desk", "html css code"],
+  "ux-ui": ["wireframe sketch", "user interface mockup", "ux design board", "app prototype"],
+  "no-code": ["website builder screen", "drag and drop interface", "laptop building website", "cms dashboard"],
+  "freelancing": ["freelancer laptop cafe", "designer portfolio", "home office desk", "client meeting laptop"],
+};
+
 const log = (...a) => console.log("[wpcrew]", ...a);
 
 async function strapi(path, init = {}) {
@@ -77,28 +87,46 @@ function sectionsToBlocks(sections) {
   return blocks;
 }
 
-async function findCoverImage(query, imagePrefix) {
+async function openverseCandidates(query) {
   try {
-    const res = await fetch(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}&license=cc0&page_size=20`, { headers: { "User-Agent": "WpCrewGen/1.0" } });
-    if (!res.ok) return null;
+    const res = await fetch(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}&license=cc0,pdm&page_size=30`, { headers: { "User-Agent": "WpCrewGen/1.0" } });
+    if (!res.ok) return [];
     const body = await res.json();
-    const cands = [...(body.results || []).filter((r) => (r.width ?? 0) >= 1000), ...(body.results || []).filter((r) => (r.width ?? 0) < 1000)];
-    for (const c of cands.slice(0, 8)) {
-      try {
-        const ir = await fetch(c.url, { headers: { "User-Agent": "Mozilla/5.0 (WpCrewGen/1.0)" }, redirect: "follow", signal: AbortSignal.timeout(30000) });
-        if (!ir.ok) continue;
-        const ct = (ir.headers.get("content-type") || "image/jpeg").split(";")[0];
-        if (!ct.startsWith("image/")) continue;
-        const buf = Buffer.from(await ir.arrayBuffer());
-        if (buf.length < 30000) continue;
-        const form = new FormData();
-        form.append("files", new Blob([buf], { type: ct }), `${imagePrefix}-cover.${ct.includes("png") ? "png" : "jpg"}`);
-        const up = await fetch(`${STRAPI_URL}/api/upload`, { method: "POST", headers: { Authorization: STRAPI_TOKEN }, body: form });
-        const ub = await up.json().catch(() => null);
-        if (up.ok && ub?.[0]?.id) return ub[0].id;
-      } catch { /* next candidate */ }
+    const r = body.results || [];
+    // Prefer larger images but keep smaller ones as fallbacks.
+    return [...r.filter((x) => (x.width ?? 0) >= 1000), ...r.filter((x) => (x.width ?? 0) < 1000)];
+  } catch {
+    return [];
+  }
+}
+
+async function uploadCandidate(c, imagePrefix) {
+  try {
+    const ir = await fetch(c.url, { headers: { "User-Agent": "Mozilla/5.0 (WpCrewGen/1.0)" }, redirect: "follow", signal: AbortSignal.timeout(30000) });
+    if (!ir.ok) return null;
+    const ct = (ir.headers.get("content-type") || "image/jpeg").split(";")[0];
+    if (!ct.startsWith("image/")) return null;
+    const buf = Buffer.from(await ir.arrayBuffer());
+    if (buf.length < 15000) return null;
+    const form = new FormData();
+    form.append("files", new Blob([buf], { type: ct }), `${imagePrefix}-cover.${ct.includes("png") ? "png" : "jpg"}`);
+    const up = await fetch(`${STRAPI_URL}/api/upload`, { method: "POST", headers: { Authorization: STRAPI_TOKEN }, body: form });
+    const ub = await up.json().catch(() => null);
+    if (up.ok && ub?.[0]?.id) return ub[0].id;
+  } catch { /* next candidate */ }
+  return null;
+}
+
+// Tries each query in order (specific -> category-generic -> broad), uploading
+// the first usable image. Greatly reduces cover-less articles.
+async function findCoverImage(queries, imagePrefix) {
+  for (const q of queries.filter(Boolean)) {
+    const cands = await openverseCandidates(q);
+    for (const c of cands.slice(0, 10)) {
+      const id = await uploadCandidate(c, imagePrefix);
+      if (id) return id;
     }
-  } catch { /* no image */ }
+  }
   return null;
 }
 
@@ -154,8 +182,14 @@ export async function generateAndPostWpcrew() {
     slug = `${slugify(a.title).slice(0, 70)}-${Math.floor(Math.random() * 9000) + 1000}`;
   }
 
-  // 6) cover image (best-effort)
-  const imageId = await findCoverImage(`${cat.slug.replace(/-/g, " ")} ${(a.tags || [])[0] || "web design"}`, `wpcrew-${slug}`);
+  // 6) cover image (best-effort, multi-query fallback)
+  const imageQueries = [
+    `${cat.slug.replace(/-/g, " ")} ${(a.tags || [])[0] || ""}`.trim(),
+    ...(QUERY_BY_CAT[cat.slug] || []),
+    "web design",
+    "technology laptop",
+  ];
+  const imageId = await findCoverImage(imageQueries, `wpcrew-${slug}`);
 
   // 7) publish
   const payload = {
