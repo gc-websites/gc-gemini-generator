@@ -6,11 +6,13 @@
  * MKLern-style schema (flat `content` blocks + `slug`), NOT the post2/post3
  * shape. It reuses only env + plain fetch. Mirrors functionsPixelHost.js.
  *
- * Generates ONE article via Gemini, finds a CC0 cover (Openverse), uploads it,
- * and publishes to the post5s collection in the shared Strapi.
+ * Generates ONE article via Gemini, generates an AI cover (Gemini image / Imagen
+ * via coverImage.js — no web scraping), and publishes to post5s in the shared Strapi.
  *
  * Env: GEMINI_API_KEY, STRAPI_API_URL, STRAPI_TOKEN (already includes "Bearer ").
  */
+
+import { generateCover } from "./coverImage.js";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY || "";
 const GEMINI_MODEL = process.env.WPCREW_GEMINI_MODEL || "gemini-2.5-flash";
@@ -26,16 +28,6 @@ const CATEGORIES = [
   { slug: "no-code", themes: ["Webflow vs WordPress", "building a site with Framer", "page builders compared", "launching a website without code", "choosing the right CMS", "useful no-code automations", "migrating away from a site builder"] },
   { slug: "freelancing", themes: ["pricing freelance web work", "writing a winning proposal", "building a web design portfolio", "finding your first clients", "smooth client onboarding", "growing from freelancer to studio", "contracts and scoping projects"] },
 ];
-
-// Per-category image queries — used as fallbacks so an article almost always
-// gets a cover even when the specific tag-based query comes up empty.
-const QUERY_BY_CAT = {
-  "web-design": ["web design desk", "ui design screen", "designer workspace", "color palette swatches"],
-  "development": ["code editor screen", "programming laptop", "developer desk", "html css code"],
-  "ux-ui": ["wireframe sketch", "user interface mockup", "ux design board", "app prototype"],
-  "no-code": ["website builder screen", "drag and drop interface", "laptop building website", "cms dashboard"],
-  "freelancing": ["freelancer laptop cafe", "designer portfolio", "home office desk", "client meeting laptop"],
-};
 
 const log = (...a) => console.log("[wpcrew]", ...a);
 
@@ -87,62 +79,16 @@ function sectionsToBlocks(sections) {
   return blocks;
 }
 
-async function openverseCandidates(query) {
-  try {
-    const res = await fetch(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}&license=cc0,pdm&page_size=30`, { headers: { "User-Agent": "WpCrewGen/1.0" } });
-    if (!res.ok) return [];
-    const body = await res.json();
-    const r = body.results || [];
-    // Prefer larger images but keep smaller ones as fallbacks.
-    return [...r.filter((x) => (x.width ?? 0) >= 1000), ...r.filter((x) => (x.width ?? 0) < 1000)];
-  } catch {
-    return [];
-  }
-}
-
-async function uploadCandidate(c, imagePrefix) {
-  try {
-    const ir = await fetch(c.url, { headers: { "User-Agent": "Mozilla/5.0 (WpCrewGen/1.0)" }, redirect: "follow", signal: AbortSignal.timeout(30000) });
-    if (!ir.ok) return null;
-    const ct = (ir.headers.get("content-type") || "image/jpeg").split(";")[0];
-    if (!ct.startsWith("image/") || ct.includes("svg")) return null;
-    const buf = Buffer.from(await ir.arrayBuffer());
-    if (buf.length < 15000) return null;
-    // Accept only raster formats next/image can render (reject SVG/XML/text).
-    const sig = buf.toString("latin1", 0, 12);
-    const raster = (buf[0] === 0xff && buf[1] === 0xd8) || (buf[0] === 0x89 && buf[1] === 0x50) || sig.startsWith("GIF8") || (sig.startsWith("RIFF") && sig.slice(8, 12) === "WEBP");
-    if (!raster) return null;
-    const form = new FormData();
-    form.append("files", new Blob([buf], { type: ct }), `${imagePrefix}-cover.${ct.includes("png") ? "png" : "jpg"}`);
-    const up = await fetch(`${STRAPI_URL}/api/upload`, { method: "POST", headers: { Authorization: STRAPI_TOKEN }, body: form });
-    const ub = await up.json().catch(() => null);
-    if (up.ok && ub?.[0]?.id) return ub[0].id;
-  } catch { /* next candidate */ }
-  return null;
-}
-
-// Tries each query in order (specific -> category-generic -> broad), uploading
-// the first usable image. Greatly reduces cover-less articles.
-async function findCoverImage(queries, imagePrefix) {
-  for (const q of queries.filter(Boolean)) {
-    const cands = await openverseCandidates(q);
-    for (const c of cands.slice(0, 10)) {
-      const id = await uploadCandidate(c, imagePrefix);
-      if (id) return id;
-    }
-  }
-  return null;
-}
-
 const ARTICLE_SCHEMA = {
   type: "object",
   properties: {
     title: { type: "string" },
     description: { type: "string" },
     tags: { type: "array", items: { type: "string" } },
+    imagePrompt: { type: "string" },
     sections: { type: "array", items: { type: "object", properties: { type: { type: "string", enum: ["h2", "p", "ul"] }, text: { type: "string" }, items: { type: "array", items: { type: "string" } } }, required: ["type"] } },
   },
-  required: ["title", "description", "tags", "sections"],
+  required: ["title", "description", "tags", "imagePrompt", "sections"],
 };
 
 /** Generate + publish one WP Crew article. Returns documentId or null. */
@@ -166,7 +112,9 @@ export async function generateAndPostWpcrew() {
     `You write for WP Crew, an independent web design & web development content site (web design, front-end development, UX/UI, no-code & CMS, freelancing). ` +
     `Write a thorough, accurate, plain-language article on: "${topic}" (category: ${cat.slug}). Audience: people who design and build websites — designers, makers and beginner-to-intermediate developers, not just senior engineers.\n` +
     `Requirements: 700-1000 words; 1-2 intro paragraphs (type "p") BEFORE any heading; then 4-6 "h2" sections each with 1-3 "p" paragraphs; include at least one "ul" list of 3-6 items; neutral, practical, evergreen; do NOT invent specific prices, brand claims, or statistics. ` +
-    `Also: a "description" (~150-char meta description) and 4-6 lowercase "tags". Return JSON per schema.`,
+    `Also: a "description" (~150-char meta description) and 4-6 lowercase "tags". ` +
+    `Also "imagePrompt": describe ONE specific, concrete cover scene whose MAIN SUBJECT literally embodies the exact concept of THIS article (not a generic person-at-a-laptop). Name the medium first (e.g. "modern editorial photograph", "clean cinematic 3D render", or "minimal conceptual illustration"), then the main subject, setting, composition and lighting/mood. Tasteful, premium, magazine-cover quality; AVOID whiteboards, sticky notes, documents, books, or screens showing text/UI; NO readable text, words, letters, numbers, logos or watermarks. One vivid sentence, ~35-50 words. ` +
+    `Return JSON per schema.`,
     ARTICLE_SCHEMA,
   );
   if (!a?.title || !Array.isArray(a.sections) || a.sections.length < 3) throw new Error("malformed article from gemini");
@@ -186,14 +134,11 @@ export async function generateAndPostWpcrew() {
     slug = `${slugify(a.title).slice(0, 70)}-${Math.floor(Math.random() * 9000) + 1000}`;
   }
 
-  // 6) cover image (best-effort, multi-query fallback)
-  const imageQueries = [
-    `${cat.slug.replace(/-/g, " ")} ${(a.tags || [])[0] || ""}`.trim(),
-    ...(QUERY_BY_CAT[cat.slug] || []),
-    "web design",
-    "technology laptop",
-  ];
-  const imageId = await findCoverImage(imageQueries, `wpcrew-${slug}`);
+  // 6) cover image — AI-generated (Gemini image -> Imagen), never scraped
+  const scene = (a.imagePrompt && a.imagePrompt.trim().length > 20)
+    ? a.imagePrompt.trim()
+    : `A clean, modern editorial cover scene representing "${a.title}" (web design & development, category ${cat.slug}) for WP Crew`;
+  const { id: imageId, src: imgSrc } = await generateCover({ scene, prefix: `wpcrew-${slug}` });
 
   // 7) publish
   const payload = {
@@ -216,6 +161,6 @@ export async function generateAndPostWpcrew() {
     body: JSON.stringify(payload),
   });
   const docId = created?.data?.documentId;
-  log(`published "${a.title}" (/${slug}) doc=${docId} img=${imageId || "none"} cat=${categoryId}`);
+  log(`published "${a.title}" (/${slug}) doc=${docId} img=${imgSrc}#${imageId || "none"} cat=${categoryId}`);
   return { documentId: docId, title: a.title, slug };
 }
