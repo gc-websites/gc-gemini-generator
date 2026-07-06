@@ -13,6 +13,7 @@
  */
 
 import { generateCover } from "./coverImage.js";
+import { buildValidatedSources, sourcesToBlocks, weaveInlineLinks } from "./sourceLinks.js";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY || "";
 const GEMINI_MODEL = process.env.PIXELHOST_GEMINI_MODEL || "gemini-2.5-flash";
@@ -140,13 +141,29 @@ export async function generateAndPostPixelHost() {
     : `A clean, modern editorial cover scene representing "${a.title}" (web hosting & domains, category ${cat.slug}) for PixelHost`;
   const { id: imageId, src: imgSrc } = await generateCover({ scene, prefix: `pixelhost-${slug}` });
 
+  // 6.5) validated source links — 3-5 real references ("Sources" section + up to 2 inline)
+  let sources = [];
+  try {
+    sources = await buildValidatedSources({
+      title: a.title,
+      summary: a.description || String(topic),
+      siteContext: "PixelHost, an independent plain-language web-hosting content site (hosting, domains, WordPress, website builders)",
+    });
+  } catch (e) {
+    log(`sources failed (publishing without): ${e.message}`);
+  }
+  const contentBlocks = sectionsToBlocks(a.sections);
+  const inlineCount = weaveInlineLinks(contentBlocks, sources, 2);
+  const content = [...contentBlocks, ...sourcesToBlocks(sources)];
+  log(`sources: ${sources.length} validated, ${inlineCount} inline`);
+
   // 7) publish
   const payload = {
     data: {
       title: a.title,
       slug,
       description: a.description || "",
-      content: sectionsToBlocks(a.sections),
+      content,
       ...(imageId ? { featuredImage: imageId } : {}),
       ...(categoryId ? { category: categoryId } : {}),
       ...(authorId ? { author: authorId } : {}),
