@@ -297,21 +297,26 @@ async function runForumReply() {
   }
 }
 
-// New forum threads — 10:00 and 19:00 America/New_York (2/day).
-cron.schedule('0 10,19 * * *', () => {
-  runForumThread().catch(err => console.error('[forum-cron] thread error:', err.message));
-}, {
-  timezone: 'America/New_York',
-});
-
-// Forum replies — every 6 hours (4/day). genReply is idempotent and only
-// fires when a thread is older than 8h with <12 comments, so this won't
-// over-populate threads even though the cron ticks 4 times.
-cron.schedule('15 */6 * * *', () => {
-  runForumReply().catch(err => console.error('[forum-cron] reply error:', err.message));
-}, {
-  timezone: 'America/New_York',
-});
+// Forum auto-fill DISABLED 2026-07-20 (per request): no automatic threads or
+// replies are generated. runForumThread/runForumReply and the /forum-admin/*
+// endpoints below are kept for manual, on-demand seeding — only the schedulers
+// are turned off. To re-enable, uncomment the two cron.schedule blocks below.
+//
+// // New forum threads — 10:00 and 19:00 America/New_York (2/day).
+// cron.schedule('0 10,19 * * *', () => {
+//   runForumThread().catch(err => console.error('[forum-cron] thread error:', err.message));
+// }, {
+//   timezone: 'America/New_York',
+// });
+//
+// // Forum replies — every 6 hours (4/day). genReply is idempotent and only
+// // fires when a thread is older than 8h with <12 comments, so this won't
+// // over-populate threads even though the cron ticks 4 times.
+// cron.schedule('15 */6 * * *', () => {
+//   runForumReply().catch(err => console.error('[forum-cron] reply error:', err.message));
+// }, {
+//   timezone: 'America/New_York',
+// });
 
 // Admin / manual endpoints — handy for first-run seeding and ops.
 server.post('/forum-admin/seed-personas', async (req, res) => {
