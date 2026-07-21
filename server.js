@@ -11,6 +11,7 @@ import { generateAndPostHairStyles } from './functionsHairStyles.js';
 import { generateAndPostPixelHost } from './functionsPixelHost.js';
 import { generateAndPostWpcrew } from './functionsWpcrew.js';
 import { generateAndPostUxdictionary } from './functionsUxdictionary.js';
+import { generateAndPostMklearn } from './functionsMklearn.js';
 import { createTelegramBot } from './tgBot.js';
 import { generateCommonTitle, generateProductsArray, postMultiproductToStrapi } from './functionsForMultiproducts.js';
 import { checkSitesAvailability } from './siteChecker.js';
@@ -197,6 +198,24 @@ https://uxdictionary.io/article/${uxdictPost.slug}`,
         });
     } catch (uxdictErr) {
       console.error('UX Dictionary generation error:', uxdictErr);
+    }
+    // MK Learn (post7s) — isolated: its own try/catch so a failure here can
+    // never affect the sites generated above.
+    try {
+      const mklearnPost = await generateAndPostMklearn();
+      await bot.sendMessage(
+        ADMIN_CHAT_ID,
+        `⭐️⭐️⭐️NEW POST⭐️⭐️⭐️
+✅MK Learn✅
+
+Title: ${mklearnPost.title}
+
+https://mklearn.pro/article/${mklearnPost.slug}`,
+        {
+          disable_web_page_preview: true
+        });
+    } catch (mklearnErr) {
+      console.error('MK Learn generation error:', mklearnErr);
     }
     console.log('Scheduled job end:', new Date().toISOString());
   } catch (err) {
