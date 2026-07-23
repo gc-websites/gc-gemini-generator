@@ -4,7 +4,8 @@ import { nanoid } from 'nanoid';
 import { signToken, verifyToken } from './token.js';
 import { scoreSignals } from './score.js';
 import { decide } from './decide.js';
-import { hit, bumpNonce } from './store.js';
+import { hit, bumpNonce, setAdscoreVerdict, getAdscoreVerdict } from './store.js';
+import { inspectSignature } from './adscore.js';
 
 const TOKEN_TTL_S = 30 * 60;
 
@@ -60,12 +61,69 @@ export function attachAntifraudRoutes(server) {
     }
   });
 
+  // Adscore signature intake. Funnel pages run Adscore's JS engine (AdscoreTag);
+  // its callback posts the encrypted signature here. We decrypt + judge it
+  // server-side (antifraud/adscore.js), remember the verdict for /af/gate and
+  // log one row per measurement. Always answers 200/4xx fast and never blocks
+  // the funnel — enforcement, if any, happens in /af/gate.
+  server.post('/af/adscore', (req, res) => {
+    try {
+      const { sid, signature, error: jsError, path, platform } = req.body || {};
+      if (!sid || typeof sid !== 'string') {
+        return res.status(400).json({ error: 'bad_request' });
+      }
+      const ip = clientIp(req);
+      const ua = req.get('user-agent') || '';
+      if (!signature || typeof signature !== 'string') {
+        // The on-page engine reported an error (or produced no signature) —
+        // still worth a row: js-level failures are a signal of their own.
+        logAdscore({ sid, ip, meta: { verdict: 'no_signature', jsError: jsError ?? null, path: path ?? null, platform: platform ?? null } });
+        return res.json({ ok: false, reason: 'no_signature' });
+      }
+      const insp = inspectSignature({ signature, ips: [ip], ua });
+      if (!insp.ok) {
+        logAdscore({ sid, ip, meta: { verdict: 'invalid', reason: insp.reason, jsError: jsError ?? null, path: path ?? null, platform: platform ?? null } });
+        return res.json({ ok: false, reason: insp.reason });
+      }
+      setAdscoreVerdict(sid, { result: insp.result, verdict: insp.verdict, strict: insp.strict });
+      logAdscore({
+        sid,
+        ip,
+        meta: {
+          result: insp.result,
+          verdict: insp.verdict,
+          name: insp.name,
+          strict: insp.strict,
+          strictReason: insp.strictReason,
+          zoneId: insp.zoneId,
+          zoneMatch: insp.zoneMatch,
+          jsError: jsError ?? null,
+          path: path ?? null,
+          platform: platform ?? null,
+        },
+      });
+      return res.json({ ok: true, verdict: insp.verdict, strict: insp.strict });
+    } catch (e) {
+      return res.status(500).json({ error: 'adscore_failed' });
+    }
+  });
+
   server.post('/af/gate', (req, res) => {
     try {
       const { token } = req.body || {};
       const v = verifyToken(token, secret());
       if (!v.valid) {
         return res.json({ allow: !enforce(), reason: v.reason || 'invalid', enforce: enforce() });
+      }
+      // Adscore verdict (external IVT detection, see /af/adscore) joins the gate
+      // under enforcement only: a session Adscore judged a BOT never gets ads,
+      // whatever the local score says. proxy/junk stay log-only for now.
+      // ADSCORE_GATE=false is the kill-switch; observe mode never blocks.
+      if (enforce() && process.env.ADSCORE_GATE !== 'false') {
+        const av = getAdscoreVerdict(v.payload.sid);
+        if (av && av.verdict === 'bot') {
+          return res.json({ allow: false, reason: 'adscore_bot', enforce: true });
+        }
       }
       // Per-token nonce BUDGET: the funnel gates several ad slots with one token
       // (na_v_top + na_o_top/mid1/mid2 + reloads), so allow up to AF_NONCE_BUDGET
@@ -92,6 +150,26 @@ function bindHash(ip, ua) {
 // Replaced with a real Strapi sink in Task 7; no-op so unit tests stay isolated.
 let logDecision = () => {};
 export function __setLogger(fn) { logDecision = fn; }
+
+// Adscore verdict logger — same Strapi click-events sink, separate hook so unit
+// tests can capture rows without network.
+let logAdscore = () => {};
+export function __setAdscoreLogger(fn) { logAdscore = fn; }
+
+// Map one Adscore measurement to a Strapi `click-event` row (same reuse of the
+// existing content type as af_decision — no schema change; verdict rides meta).
+export function buildAdscoreLogRow({ sid, ip, meta }) {
+  return {
+    data: {
+      session_id: sid || null,
+      event_type: 'adscore_verdict',
+      funnel_step: 'adscore',
+      client_ip: ip || null,
+      meta,
+      clicked_at: new Date().toISOString(),
+    },
+  };
+}
 
 // Map one anti-fraud decision to a Strapi `click-event` row. Reuses the existing
 // content type (no schema change): event_type tags the row as a decision and the
@@ -120,6 +198,15 @@ __setLogger((d) => {
     headers: { Authorization: process.env.STRAPI_TOKEN, 'Content-Type': 'application/json' },
     body: JSON.stringify(buildAfLogRow(d)),
   }).catch((e) => console.error('af log error:', e.message));
+});
+
+__setAdscoreLogger((d) => {
+  if (!process.env.STRAPI_API_URL || !process.env.STRAPI_TOKEN) return;
+  fetch(`${process.env.STRAPI_API_URL}/api/click-events`, {
+    method: 'POST',
+    headers: { Authorization: process.env.STRAPI_TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildAdscoreLogRow(d)),
+  }).catch((e) => console.error('adscore log error:', e.message));
 });
 
 export function shouldForwardConversion({ afToken, enforce, secret, thresholds = {} }) {
