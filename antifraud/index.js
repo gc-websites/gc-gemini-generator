@@ -1,4 +1,5 @@
 // antifraud/index.js
+import fs from 'node:fs';
 import requestIp from 'request-ip';
 import { nanoid } from 'nanoid';
 import { signToken, verifyToken } from './token.js';
@@ -191,22 +192,40 @@ export function buildAfLogRow({ sid, step, score, reasons, band, ip }) {
 // because server.js runs dotenv.config() AFTER importing this module — checking at
 // import time would always see unset env and silently never log. In unit tests
 // STRAPI_API_URL/STRAPI_TOKEN are unset, so this stays a no-op (no network).
-__setLogger((d) => {
+// ⚠️ Strapi's click-events.event_type is an ENUM (prelend_view … page_exit) that
+// does not include af_decision/adscore_verdict — those writes 400 until the
+// schema gains the values (fetch treats 4xx as success, hence the res.ok check;
+// this had been silently swallowing every af_decision row). The JSONL file
+// below is the durable local sink in the meantime.
+const AF_LOG_DIR = new URL('../logs/', import.meta.url);
+
+function appendJsonl(file, row) {
+  try {
+    fs.mkdirSync(AF_LOG_DIR, { recursive: true });
+    fs.appendFile(new URL(file, AF_LOG_DIR), JSON.stringify(row) + '\n', () => {});
+  } catch { /* logging must never throw */ }
+}
+
+function postClickEvent(row, label) {
   if (!process.env.STRAPI_API_URL || !process.env.STRAPI_TOKEN) return;
   fetch(`${process.env.STRAPI_API_URL}/api/click-events`, {
     method: 'POST',
     headers: { Authorization: process.env.STRAPI_TOKEN, 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildAfLogRow(d)),
-  }).catch((e) => console.error('af log error:', e.message));
+    body: JSON.stringify(row),
+  })
+    .then((r) => { if (!r.ok) console.error(`${label} log rejected:`, r.status); })
+    .catch((e) => console.error(`${label} log error:`, e.message));
+}
+
+__setLogger((d) => {
+  appendJsonl('af-decisions.jsonl', { ts: new Date().toISOString(), ...d });
+  postClickEvent(buildAfLogRow(d), 'af');
 });
 
 __setAdscoreLogger((d) => {
-  if (!process.env.STRAPI_API_URL || !process.env.STRAPI_TOKEN) return;
-  fetch(`${process.env.STRAPI_API_URL}/api/click-events`, {
-    method: 'POST',
-    headers: { Authorization: process.env.STRAPI_TOKEN, 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildAdscoreLogRow(d)),
-  }).catch((e) => console.error('adscore log error:', e.message));
+  appendJsonl('adscore-verdicts.jsonl', { ts: new Date().toISOString(), sid: d.sid, ip: d.ip, ...d.meta });
+  console.log('adscore verdict:', d.sid, d.meta?.verdict ?? '?', d.meta?.strict === false ? `soft(${d.meta?.strictReason})` : '');
+  postClickEvent(buildAdscoreLogRow(d), 'adscore');
 });
 
 export function shouldForwardConversion({ afToken, enforce, secret, thresholds = {} }) {
