@@ -331,6 +331,45 @@ async function slugTaken(slug) {
   }
 }
 
+/**
+ * Purge the page's ISR cache after publishing, then warm it. The slug-collision HEAD probe
+ * above renders the not-yet-existing page and CACHES its 404 (route + data cache re-serve each
+ * other's stale entry well past `revalidate`) — without this purge a fresh landing can stay 404
+ * for many minutes. Auth = the same Strapi bearer both sides already hold. Non-fatal: on failure
+ * the page eventually heals via ISR, so the job still counts as published.
+ */
+async function revalidateLanding(slug) {
+  const origin = LANDING_BASE.replace(/\/guides$/, "");
+  const bearer = STRAPI_TOKEN.startsWith("Bearer ") ? STRAPI_TOKEN : `Bearer ${STRAPI_TOKEN}`;
+  try {
+    const res = await fetch(`${origin}/api/revalidate`, {
+      method: "POST",
+      headers: { Authorization: bearer, "Content-Type": "application/json" },
+      body: JSON.stringify({ path: `/guides/${slug}` }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`revalidate ${res.status}`);
+  } catch (e) {
+    log(`revalidate failed for ${slug}: ${e.message} (page will heal via ISR)`);
+    return false;
+  }
+  // Warm + verify: the first GET renders fresh; retry a couple of times for slow cold renders.
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await fetch(`${LANDING_BASE}/${slug}`, { signal: AbortSignal.timeout(20000) });
+      if (res.ok) {
+        log(`landing live: ${LANDING_BASE}/${slug} (${res.status})`);
+        return true;
+      }
+    } catch {
+      /* retry */
+    }
+    await sleep(2500);
+  }
+  log(`landing still not 200 after revalidate: ${slug}`);
+  return false;
+}
+
 async function uniqueSlug(title) {
   const base = slugify(title) || `guide-${Date.now().toString(36)}`;
   if (!(await slugTaken(base))) return base;
@@ -387,6 +426,7 @@ export async function generateMoLanding(job) {
   const docId = created?.data?.documentId;
   const url = `${LANDING_BASE}/${slug}`;
   log(`published "${a.titleLead}" -> ${url} (doc=${docId}, hero=${heroId || "none"})`);
+  await revalidateLanding(slug);
   return { slug, url, title: `${a.titleLead} ${a.titleAccent}`.trim() };
 }
 
