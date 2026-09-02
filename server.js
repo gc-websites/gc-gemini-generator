@@ -12,6 +12,7 @@ import { generateAndPostPixelHost } from './functionsPixelHost.js';
 import { generateAndPostWpcrew } from './functionsWpcrew.js';
 import { generateAndPostUxdictionary } from './functionsUxdictionary.js';
 import { generateAndPostMklearn } from './functionsMklearn.js';
+import { runMoLandingWorker } from './functionsMoLanding.js';
 import { createTelegramBot } from './tgBot.js';
 import { generateCommonTitle, generateProductsArray, postMultiproductToStrapi } from './functionsForMultiproducts.js';
 import { checkSitesAvailability } from './siteChecker.js';
@@ -225,6 +226,24 @@ https://mklearn.pro/article/${mklearnPost.slug}`,
   }
 }, {
   timezone: 'Europe/Kiev'
+});
+
+// MO Auto Landings worker (Ad Launcher "Auto landings" console → mo-landing-job queue →
+// full MK Learn guide landings, served dynamically by the frontend). Every minute; the latch
+// keeps ticks from stacking while a landing is being written (~1-3 min each).
+let moLandingRunning = false;
+cron.schedule('* * * * *', async () => {
+  if (moLandingRunning) return;
+  moLandingRunning = true;
+  try {
+    await runMoLandingWorker((text) =>
+      bot.sendMessage(ADMIN_CHAT_ID, text, { disable_web_page_preview: true }),
+    );
+  } catch (err) {
+    console.error('MO landing worker error:', err);
+  } finally {
+    moLandingRunning = false;
+  }
 });
 
 cron.schedule('30 9 * * *', async () => {
