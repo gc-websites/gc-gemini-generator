@@ -13,6 +13,12 @@
  * sections, education-not-advice + on-page disclaimers). Never loosen these rules from job input:
  * job `notes` may steer topic/angle, not the guardrails.
  *
+ * FORMATS: `job.format` = "classic" (this file's original template: intro + sections) or
+ * "jobguide" (default — the job-style guide template; schemas/prompts/assembly live in
+ * moLandingJobguide.js). Jobguide needs the MK Learn deploy that serves it: the worker probes
+ * GET <origin>/api/guides and DEFERS the job (status back to scheduled, +10 min) until "jobguide"
+ * is listed in `formats`.
+ *
  * Env: GEMINI_API_KEY, STRAPI_API_URL, STRAPI_TOKEN ("Bearer " included),
  *      MO_LANDING_GEMINI_MODEL (default gemini-2.5-flash),
  *      MO_LANDING_IMG_MODEL    (default gemini-3-pro-image; falls back to gemini-2.5-flash-image),
@@ -20,6 +26,17 @@
  */
 
 import { isRaster } from "./coverImage.js";
+import {
+  JOBGUIDE_ARTICLE_SCHEMA,
+  buildArticlePrompt,
+  buildFunnelPrompt,
+  funnelSchemaFor,
+  selectInterlinks,
+  normalizeArticle,
+  normalizeFunnel,
+  assembleJobGuideContent,
+  articleWordCount,
+} from "./moLandingJobguide.js";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY || "";
 const STRAPI_URL = (process.env.STRAPI_API_URL || "").replace(/\/+$/, "");
@@ -50,7 +67,7 @@ async function strapi(path, init = {}) {
   return body;
 }
 
-async function gemini(prompt, schema) {
+async function gemini(prompt, schema, timeoutMs = 180000) {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${TEXT_MODEL}:generateContent?key=${GEMINI_KEY}`,
     {
@@ -62,7 +79,7 @@ async function gemini(prompt, schema) {
           ? { responseMimeType: "application/json", responseSchema: schema, temperature: 0.7 }
           : { temperature: 0.8 },
       }),
-      signal: AbortSignal.timeout(180000),
+      signal: AbortSignal.timeout(timeoutMs),
     },
   );
   const body = await res.json().catch(() => null);
@@ -80,6 +97,7 @@ function slugify(s) {
     .replace(/[^\w\s-]/g, "")
     .trim()
     .replace(/\s+/g, "-")
+    .replace(/_/g, "-") // \w keeps "_" — the site's slug regex does not
     .replace(/-+/g, "-")
     .slice(0, 70)
     .replace(/^-|-$/g, "");
@@ -380,6 +398,184 @@ async function uniqueSlug(title) {
   throw new Error(`could not find a free slug for "${base}"`);
 }
 
+// ---- deferral + site capability probe --------------------------------------------------------
+
+/** Thrown by generateMoLanding when the job cannot run YET (not a failure): re-schedule in delayMs. */
+export class DeferError extends Error {
+  constructor(message, delayMs) {
+    super(message);
+    this.name = "DeferError";
+    this.delayMs = Number(delayMs) || 10 * 60 * 1000;
+  }
+}
+
+const DEFER_NOT_LIVE = "waiting for MK Learn deploy (jobguide template not live)";
+const DEFER_MS = 10 * 60 * 1000;
+const PROBE_TTL_MS = 5 * 60 * 1000;
+let siteProbeCache = { at: 0, data: null };
+
+/**
+ * GET <origin>/api/guides — the MK Learn capability probe (contract §5): { formats, guides }.
+ * Cached 5 min on success. Network error / non-JSON / non-ok → DeferError (the job waits).
+ */
+export async function probeSite() {
+  if (siteProbeCache.data && Date.now() - siteProbeCache.at < PROBE_TTL_MS) return siteProbeCache.data;
+  const origin = LANDING_BASE.replace(/\/guides$/, "");
+  let body;
+  try {
+    const res = await fetch(`${origin}/api/guides`, { signal: AbortSignal.timeout(15000) });
+    body = await res.json().catch(() => null);
+    if (!res.ok || !body) throw new Error(`probe ${res.status}`);
+  } catch (e) {
+    log(`site probe failed: ${e.message}`);
+    throw new DeferError(DEFER_NOT_LIVE, DEFER_MS);
+  }
+  if (!Array.isArray(body.formats) || !Array.isArray(body.guides)) throw new DeferError(DEFER_NOT_LIVE, DEFER_MS);
+  const data = { formats: body.formats.map(String), guides: body.guides.filter((g) => g && g.slug && g.image) };
+  siteProbeCache = { at: Date.now(), data };
+  return data;
+}
+
+/** Absolute URL of a Strapi media file (Cloud returns absolute URLs; local Strapi returns /uploads/...). */
+function mediaUrl(u) {
+  if (!u) return "";
+  return /^https?:\/\//i.test(u) ? u : `${STRAPI_URL}${u.startsWith("/") ? "" : "/"}${u}`;
+}
+
+/**
+ * Published auto landings of one lang that have a hero image, newest first — catalog entries for
+ * the interlink pool ({ slug, lang, title, niche, image, width, height }). Rows without a hero skip.
+ */
+export async function fetchRecentAutoLandings(lang) {
+  const L = lang === "es" ? "es" : "en";
+  const rows = await strapi(
+    `mo-landings?filters[lang][$eq]=${L}&populate=hero&sort[0]=createdAt:desc&pagination[pageSize]=25`,
+  );
+  const out = [];
+  for (const r of rows?.data || []) {
+    const hero = r?.hero;
+    if (!hero || !r.slug) continue;
+    const fmt = hero.formats?.small;
+    const url = mediaUrl(fmt?.url || hero.url);
+    if (!url) continue;
+    out.push({
+      slug: r.slug,
+      lang: L,
+      title: `${r.title || ""} ${r.title_accent || ""}`.trim() || r.slug,
+      niche: r.niche || "",
+      image: url,
+      width: Number(fmt?.width || hero.width) || 500,
+      height: Number(fmt?.height || hero.height) || 279,
+      auto: true,
+    });
+  }
+  return out;
+}
+
+// ---- jobguide format -------------------------------------------------------------------------
+
+function figureEnvelope(scene) {
+  return (
+    `Wide 16:9 editorial photograph, documentary style, used as an in-article illustration: ${scene} ` +
+    `Realistic, tasteful, premium. No text, no logos, no brands, no UI screens, no recognizable faces.`
+  );
+}
+
+/**
+ * Dry-run core of the jobguide path: Gemini call #1 (article) → slug → interlinks → Gemini call #2
+ * (funnel) → assembled JobGuideContent. NO Strapi writes, NO image. `catalog` = static guides
+ * (any lang; filtered here), `recentAuto` = fetchRecentAutoLandings() rows, `slugFor(article)` =
+ * async slug picker (default: plain slugify of the generated title).
+ */
+export async function draftJobguide(job, { catalog, recentAuto, slugFor } = {}) {
+  if (!GEMINI_KEY) throw new Error("missing GEMINI_API_KEY");
+  const lang = job.lang === "es" ? "es" : "en";
+  const statics = (Array.isArray(catalog) ? catalog : []).filter((g) => g && g.slug && g.image && (g.lang || lang) === lang);
+  if (!statics.length && !(recentAuto || []).length) throw new Error(`no interlink catalog for lang=${lang}`);
+
+  const rawArticle = await gemini(buildArticlePrompt({ ...job, lang }), JOBGUIDE_ARTICLE_SCHEMA, 240000);
+  const article = normalizeArticle(rawArticle);
+  const words = articleWordCount(article);
+  log(`jobguide article "${article.title}" (${words} words)`);
+
+  const fullTitle = `${article.title} ${article.titleAccent}`.trim().slice(0, 90) || job.title;
+  const slug = slugFor ? await slugFor(article, fullTitle) : slugify(fullTitle) || `guide-${Date.now().toString(36)}`;
+
+  const links = selectInterlinks(statics, { lang, niche: job.niche, selfSlug: slug, recentAuto: recentAuto || [] });
+  const catalogBySlug = {};
+  for (const g of links.pool) catalogBySlug[g.slug] = g;
+
+  let funnel;
+  try {
+    const rawFunnel = await gemini(buildFunnelPrompt(article, links, lang), funnelSchemaFor(links), 120000);
+    funnel = normalizeFunnel(rawFunnel, links, lang);
+  } catch (e) {
+    // Funnel copy is decorative: fall back to catalog-derived copy rather than failing the job.
+    log(`funnel call failed, using fallback copy: ${e.message}`);
+    funnel = normalizeFunnel({}, links, lang);
+  }
+  const content = assembleJobGuideContent({ slug, lang, article, funnel, links, catalogBySlug, figureCaption: article.imageCaption });
+  return { slug, lang, article, funnel, links, content, words };
+}
+
+/** The jobguide publish path: probe → catalog → draft → image → mo-landings POST → revalidate. */
+async function generateJobguideLanding(job) {
+  const site = await probeSite(); // DeferError when the site is unreachable / not JSON
+  if (!site.formats.includes("jobguide")) throw new DeferError(DEFER_NOT_LIVE, DEFER_MS);
+  const lang = job.lang === "es" ? "es" : "en";
+  let recentAuto = [];
+  try {
+    recentAuto = await fetchRecentAutoLandings(lang);
+  } catch (e) {
+    log(`recent auto landings fetch failed (static catalog only): ${e.message}`);
+  }
+  const draft = await draftJobguide(job, {
+    catalog: site.guides,
+    recentAuto,
+    slugFor: (_article, fullTitle) => uniqueSlug(fullTitle),
+  });
+  const { slug, article, content } = draft;
+
+  const scene =
+    article.imagePrompt && article.imagePrompt.length > 20
+      ? article.imagePrompt
+      : `An editorial photograph representing "${job.title}".`;
+  const heroId = await generateHero(figureEnvelope(scene), `mo-landing-${slug}`);
+
+  const payload = {
+    data: {
+      format: "jobguide",
+      title: article.title,
+      title_accent: article.titleAccent,
+      slug,
+      lang,
+      niche: job.niche || "Auto",
+      category_label: article.category,
+      subtitle: article.guideSummary,
+      description: article.description,
+      row_title: article.rowTitle || `${article.title}`.slice(0, 70),
+      ...(heroId ? { hero: heroId } : {}),
+      hero_alt: article.imageAlt || article.title,
+      content,
+      faq: content.faq.items.map((f) => ({ q: f.q, a: f.a })),
+      takeaways: [],
+      compliance: content.disclaimer.text,
+      created_by: job.created_by || "",
+      job_id: job.documentId,
+    },
+  };
+  const created = await strapi(`mo-landings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const docId = created?.data?.documentId;
+  const url = `${LANDING_BASE}/${slug}`;
+  log(`published jobguide "${article.title}" -> ${url} (doc=${docId}, hero=${heroId || "none"}, ${draft.words} words)`);
+  await revalidateLanding(slug);
+  return { slug, url, title: `${article.title} ${article.titleAccent}`.trim() };
+}
+
 // ---- one job ---------------------------------------------------------------------------------
 
 /** Generate + publish one landing for a claimed job. Returns { slug, url, title }. */
@@ -387,6 +583,8 @@ export async function generateMoLanding(job) {
   if (!GEMINI_KEY || !STRAPI_URL || !STRAPI_TOKEN) {
     throw new Error("missing GEMINI_API_KEY / STRAPI_API_URL / STRAPI_TOKEN");
   }
+  const format = job.format === "classic" ? "classic" : "jobguide";
+  if (format === "jobguide") return generateJobguideLanding(job);
   const raw = await gemini(landingPrompt(job), LANDING_SCHEMA);
   const a = normalizeLanding(raw);
   const slug = await uniqueSlug(`${a.titleLead} ${a.titleAccent}`.slice(0, 90) || job.title);
@@ -445,6 +643,8 @@ async function patchJob(documentId, data) {
  * `notify(text)` is optional (Telegram). Designed for a 1-minute cron with an isRunning latch
  * in server.js — a single worker instance, so claim = a simple status flip.
  */
+let deferNoticeSent = false; // at most ONE "deferred" Telegram notice per worker process
+
 export async function runMoLandingWorker(notify) {
   if (!STRAPI_URL || !STRAPI_TOKEN) return { processed: 0 };
   const now = Date.now();
@@ -492,7 +692,7 @@ export async function runMoLandingWorker(notify) {
       continue;
     }
     try {
-      log(`generating "${job.title}" (${job.lang || "en"}, ${job.niche || "Auto"})…`);
+      log(`generating "${job.title}" (${job.lang || "en"}, ${job.niche || "Auto"}, ${job.format === "classic" ? "classic" : "jobguide"})…`);
       const res = await generateMoLanding(job);
       await patchJob(job.documentId, {
         status: "published",
@@ -509,6 +709,23 @@ export async function runMoLandingWorker(notify) {
       }
     } catch (e) {
       const msg = String(e?.message || e).slice(0, 800);
+      if (e instanceof DeferError) {
+        const at = Date.now() + e.delayMs;
+        log(`job ${job.documentId} DEFERRED ${Math.round(e.delayMs / 60000)} min: ${msg}`);
+        await patchJob(job.documentId, {
+          status: "scheduled",
+          scheduled_at: String(at),
+          error: msg,
+          // roll back the claim: a deferral is not an attempt
+          attempts: Number(job.attempts) || 0,
+          started_at: null,
+        }).catch((pe) => log(`defer patch failed for ${job.documentId}: ${pe.message}`));
+        if (notify && !deferNoticeSent) {
+          deferNoticeSent = true;
+          await notify(`⏳ Auto landing deferred: ${job.title} — ${msg}`).catch(() => {});
+        }
+        continue;
+      }
       log(`job ${job.documentId} FAILED: ${msg}`);
       await patchJob(job.documentId, {
         status: "failed",
